@@ -1,2 +1,4 @@
+__pycache__/
 *.m
 *.mat
+test.py

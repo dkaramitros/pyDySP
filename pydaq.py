@@ -37,7 +37,18 @@ class Test:
         time = imported_data['t'].flatten()
         self.channel = [ Channel() for _ in range(int(self.no_channels)) ]
         for i,channel_i in enumerate(self.channel):
-            channel_i.set_channel_data(time = time, raw_data=imported_data[f'chan{i+1}'].flatten())
+            channel_i.set_channel_data(raw_time = time, raw_data=imported_data[f'chan{i+1}'].flatten())
+    
+    def remove_offset(self, points: int=1000):
+        for channel_i in self.channel:
+            channel_i.remove_offset(points=points)
+    
+    def trim(self, start: int=None, end: int=None, ratio: float=0.05, max_threshold: float=0.01,
+        buffer: int=100, time_shift: bool=True):
+            [start_0,end_0] = self.channel[0].trim(start=start, end=end, ratio=ratio,
+                max_threshold=max_threshold, buffer=buffer, time_shift=time_shift)  
+            for channel_i in self.channel[1:]:
+                channel_i.trim(start=start_0, end=end_0, time_shift=time_shift)       
              
 
 class Channel:
@@ -51,11 +62,33 @@ class Channel:
         self.unit = unit
         self.calibration = calibration
 
-    def set_channel_data(self, time: np.ndarray, raw_data: np.ndarray):
-        self._time = time
+    def set_channel_data(self, raw_time: np.ndarray, raw_data: np.ndarray):
+        self._raw_time = raw_time
+        self._time = raw_time
         self._raw_data = raw_data
         self._data = raw_data
-    
+
+    def reset_raw_data(self):
+        self._time = self._raw_time
+        self._data = self._raw_data
+
+    def remove_offset(self, points: int=1000):
+        self._data = self._raw_data - np.average(self._raw_data[:points])
+
+    def trim(self, start: int=None, end: int=None, ratio: float=0.05, max_threshold: float=0.01,
+        buffer: int=100, time_shift: bool=True):
+        if start == None or end == None:
+            min_threshold = ratio * np.amax(np.abs(self._data))
+            max_threshold /= self.calibration
+            threshold = min([min_threshold, max_threshold])
+            start = max([np.argmax(np.abs(self._data) > threshold) - buffer, 0])
+            end = np.size(self._data) - max([np.argmax(np.abs(np.flip(self._data)) > threshold) - buffer, 0]) 
+        self._time = self._time[start:end]
+        self._data = self._data[start:end]
+        if time_shift == True:
+            self._time -= self._time[0]
+        return [start,end]
+
     def label(self):
         ylabel = self.name + " (" + self.unit + ")"
         return ylabel
