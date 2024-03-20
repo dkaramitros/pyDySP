@@ -1,18 +1,19 @@
 # Import libraries
 import scipy as sp
 import numpy as np
+import matplotlib.pyplot as plt
 
 class Test:
     
     def __init__(self):
         pass
 
-    def set_test_info(self, name: str=None, description: str=None, filename: str=None, time: str=None, no_channels: int=0):
+    def set_test_info(self, name: str=None, description: str=None, filename: str=None, time: str=None, no_channels: int=None):
         if name != None: self.name = name
         if description != None: self.description = description
         if filename != None: self.filename = filename
         if time != None: self.time = time
-        self.no_channels = no_channels
+        if no_channels != None: self.no_channels = no_channels
 
     def set_test_data(self, time: float=0, dataseries: float=0):
         self.data = [ Channel() for _ in range(int(self.no_channels))]
@@ -20,8 +21,8 @@ class Test:
             data.set_channel_data(time=time, raw_data=dataseries[i])
 
     def set_channels_info(self, names: str=None, descriptions: str=None, units: str=None, calibrations: float=1):
-        for i,channel_i in enumerate(self.channel):
-            channel_i.set_channel_info(
+        for i,channel in enumerate(self.channel):
+            channel.set_channel_info(
                 name = names[i],
                 description = descriptions[i],
                 unit = units[i],
@@ -36,20 +37,53 @@ class Test:
         self.no_channels = imported_data['No_Channels'][0][0]
         time = imported_data['t'].flatten()
         self.channel = [ Channel() for _ in range(int(self.no_channels)) ]
-        for i,channel_i in enumerate(self.channel):
-            channel_i.set_channel_data(raw_time = time, raw_data=imported_data[f'chan{i+1}'].flatten())
+        for i,channel in enumerate(self.channel):
+            channel.set_channel_data(raw_time = time, raw_data=imported_data[f'chan{i+1}'].flatten())
     
     def remove_offset(self, points: int=1000):
-        for channel_i in self.channel:
-            channel_i.remove_offset(points=points)
+        for channel in self.channel:
+            channel.remove_offset(points=points)
     
     def trim(self, start: int=None, end: int=None, ratio: float=0.05, max_threshold: float=0.01,
         buffer: int=100, time_shift: bool=True):
             [start_0,end_0] = self.channel[0].trim(start=start, end=end, ratio=ratio,
                 max_threshold=max_threshold, buffer=buffer, time_shift=time_shift)  
-            for channel_i in self.channel[1:]:
-                channel_i.trim(start=start_0, end=end_0, time_shift=time_shift)       
-             
+            for channel in self.channel[1:]:
+                channel.trim(start=start_0, end=end_0, time_shift=time_shift)
+    
+    def plot_timehistories(self, channels: int=None, columns: int=3):
+        if channels == None: channels = np.arange(self.no_channels)
+        channels = np.reshape(channels,[-1,columns])
+        no_rows = np.shape(channels)[0]
+        no_cols = np.shape(channels)[1]
+        fig,axs = plt.subplots(no_rows, no_cols, sharex=True, sharey=True)
+        fig.suptitle(self.name)
+        fig.set_tight_layout(True)
+        for row in range(no_rows):
+            for col in range(no_cols):
+                channel = self.channel[channels[row][col]]
+                if no_cols > 1 and no_rows > 1:
+                    channel.plot_timehistory(axs[row,col])
+                else:
+                    channel.plot_timehistory(axs[(row+1)*(col+1)-1])
+        return axs
+
+    def plot_fourier(self, channels: int=None, columns: int=3, xlimit: float=50):
+        if channels == None: channels = np.arange(self.no_channels)
+        channels = np.reshape(channels,[-1,columns])
+        no_rows = np.shape(channels)[0]
+        no_cols = np.shape(channels)[1]
+        fig,axs = plt.subplots(no_rows, no_cols, sharex=True, sharey=True)
+        fig.suptitle(self.name)
+        fig.set_tight_layout(True)
+        for row in range(no_rows):
+            for col in range(no_cols):
+                channel = self.channel[channels[row][col]]
+                if no_cols > 1 and no_rows > 1:
+                    channel.plot_fourier(axs[row,col], xlimit=xlimit)
+                else:
+                    channel.plot_fourier(axs[(row+1)*(col+1)-1], xlimit=xlimit)
+        return axs
 
 class Channel:
     
@@ -89,10 +123,6 @@ class Channel:
             self._time -= self._time[0]
         return [start,end]
 
-    def label(self):
-        ylabel = self.name + " (" + self.unit + ")"
-        return ylabel
-
     def timehistory(self):
         t = self._time
         y = self._data / self.calibration
@@ -106,3 +136,24 @@ class Channel:
         spec = np.abs( np.fft.rfft(a=y, n=no_f) )
         f = np.fft.rfftfreq(n=no_f,d=dt)
         return np.array([f,spec])
+    
+    def plot_timehistory(self, ax=None):
+        if ax == None:
+            fig, ax = plt.subplots()
+        [t,y] = self.timehistory()
+        ax.plot(t,y)
+        ax.set_xlabel("Time (sec)")
+        ax.set_ylabel(self.name + " (" + self.unit + ")")
+        ax.grid()
+        return ax
+
+    def plot_fourier(self, ax=None, xlimit: float=50):
+        if ax == None:
+            fig, ax = plt.subplots()
+        [f,y] = self.fourier()
+        ax.plot(f,y)
+        ax.set_xlabel("Frequency (Hz)")
+        ax.set_ylabel(self.name)
+        ax.set_xlim(0,xlimit)
+        ax.grid()
+        return ax
