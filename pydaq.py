@@ -65,7 +65,7 @@ class Test:
                 channel.plot_timehistory(ax)
         return axs
 
-    def plot_fourier(self, channels: np.ndarray = None, columns: int = 3, xlim: float = 50):
+    def plot_fourier(self, channels: np.ndarray = None, columns: int = 1, xlim: float = 50):
         if channels is None:
             channels = np.arange(self.no_channels)
         no_channels = len(channels)
