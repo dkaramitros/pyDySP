@@ -50,8 +50,8 @@ class Test:
                 max_threshold=max_threshold, buffer=buffer, time_shift=time_shift)  
             for channel in self.channel[1:]:
                 channel.trim(start=start_0, end=end_0, time_shift=time_shift)
-    
-    def plot_timehistories(self, channels: int=None, columns: int=3):
+
+    def plot_timehistories(self, channels: int=None, columns: int=1):
         if channels == None: channels = np.arange(self.no_channels)
         channels = np.reshape(channels,[-1,columns])
         no_rows = np.shape(channels)[0]
@@ -68,7 +68,7 @@ class Test:
                     channel.plot_timehistory(axs[(row+1)*(col+1)-1])
         return axs
 
-    def plot_fourier(self, channels: int=None, columns: int=3, xlimit: float=50):
+    def plot_fourier(self, channels: int=None, columns: int=3, xlim: float=50):
         if channels == None: channels = np.arange(self.no_channels)
         channels = np.reshape(channels,[-1,columns])
         no_rows = np.shape(channels)[0]
@@ -80,10 +80,11 @@ class Test:
             for col in range(no_cols):
                 channel = self.channel[channels[row][col]]
                 if no_cols > 1 and no_rows > 1:
-                    channel.plot_fourier(axs[row,col], xlimit=xlimit)
+                    channel.plot_fourier(axs[row,col], xlim=xlim)
                 else:
-                    channel.plot_fourier(axs[(row+1)*(col+1)-1], xlimit=xlimit)
+                    channel.plot_fourier(axs[(row+1)*(col+1)-1], xlim=xlim)
         return axs
+
 
 class Channel:
     
@@ -133,9 +134,9 @@ class Channel:
         no_t = np.size(t)
         dt = t[1] - t[0]
         no_f = int( 2**(no_t-1).bit_length() )
-        spec = np.abs( np.fft.rfft(a=y, n=no_f) )
+        s = np.abs( np.fft.rfft(a=y, n=no_f) )
         f = np.fft.rfftfreq(n=no_f,d=dt)
-        return np.array([f,spec])
+        return np.array([f,s])
     
     def plot_timehistory(self, ax=None):
         if ax == None:
@@ -147,13 +148,13 @@ class Channel:
         ax.grid()
         return ax
 
-    def plot_fourier(self, ax=None, xlimit: float=50):
+    def plot_fourier(self, ax=None, xlim: float=50):
         if ax == None:
             fig, ax = plt.subplots()
-        [f,y] = self.fourier()
-        ax.plot(f,y)
+        [f,s] = self.fourier()
+        ax.plot(f,s)
         ax.set_xlabel("Frequency (Hz)")
         ax.set_ylabel(self.name)
-        ax.set_xlim(0,xlimit)
+        ax.set_xlim(0,xlim)
         ax.grid()
         return ax
