@@ -51,38 +51,32 @@ class Test:
             for channel in self.channel[1:]:
                 channel.trim(start=start_0, end=end_0, time_shift=time_shift)
 
-    def plot_timehistories(self, channels: int=None, columns: int=1):
-        if channels == None: channels = np.arange(self.no_channels)
-        channels = np.reshape(channels,[-1,columns])
-        no_rows = np.shape(channels)[0]
-        no_cols = np.shape(channels)[1]
-        fig,axs = plt.subplots(no_rows, no_cols, sharex=True, sharey=True)
+    def plot_timehistories(self, channels: np.ndarray = None, columns: int = 1):
+        if channels is None:
+            channels = np.arange(self.no_channels)
+        no_channels = len(channels)
+        rows = -(-no_channels // columns)
+        fig, axs = plt.subplots(rows, columns, sharex=True, sharey=True)
         fig.suptitle(self.name)
         fig.set_tight_layout(True)
-        for row in range(no_rows):
-            for col in range(no_cols):
-                channel = self.channel[channels[row][col]]
-                if no_cols > 1 and no_rows > 1:
-                    channel.plot_timehistory(axs[row,col])
-                else:
-                    channel.plot_timehistory(axs[(row+1)*(col+1)-1])
+        for idx, ax in enumerate(axs.flat):
+            if idx < no_channels:
+                channel = self.channel[channels[idx]]
+                channel.plot_timehistory(ax)
         return axs
 
-    def plot_fourier(self, channels: int=None, columns: int=3, xlim: float=50):
-        if channels == None: channels = np.arange(self.no_channels)
-        channels = np.reshape(channels,[-1,columns])
-        no_rows = np.shape(channels)[0]
-        no_cols = np.shape(channels)[1]
-        fig,axs = plt.subplots(no_rows, no_cols, sharex=True, sharey=True)
+    def plot_fourier(self, channels: np.ndarray = None, columns: int = 3, xlim: float = 50):
+        if channels is None:
+            channels = np.arange(self.no_channels)
+        no_channels = len(channels)
+        rows = -(-no_channels // columns)
+        fig, axs = plt.subplots(rows, columns, sharex=True, sharey=True)
         fig.suptitle(self.name)
         fig.set_tight_layout(True)
-        for row in range(no_rows):
-            for col in range(no_cols):
-                channel = self.channel[channels[row][col]]
-                if no_cols > 1 and no_rows > 1:
-                    channel.plot_fourier(axs[row,col], xlim=xlim)
-                else:
-                    channel.plot_fourier(axs[(row+1)*(col+1)-1], xlim=xlim)
+        for idx, ax in enumerate(axs.flat):
+            if idx < no_channels:
+                channel = self.channel[channels[idx]]
+                channel.plot_fourier(ax, xlim=xlim)
         return axs
 
 
