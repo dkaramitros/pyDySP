@@ -6,6 +6,14 @@ import matplotlib.pyplot as plt
 class Test:
     
     def __init__(self):
+        # Info
+        self.name = "Default test"
+        self.description = "This is the default test"
+        self.filename = "N/A"
+        self.time = "N/A"
+        self.no_channels = 0
+        # Data
+        self.channel = []
         pass
 
     def set_test_info(self, name: str=None, description: str=None, filename: str=None, time: str=None, no_channels: int=None):
@@ -15,12 +23,11 @@ class Test:
         if time != None: self.time = time
         if no_channels != None: self.no_channels = no_channels
 
-    def set_test_data(self, time: float=0, dataseries: float=0):
-        self.data = [ Channel() for _ in range(int(self.no_channels))]
-        for i,data in enumerate(self.data):
-            data.set_channel_data(time=time, raw_data=dataseries[i])
+    def add_channel(self):
+        self.no_channels += 1
+        self.channel.append(Channel())
 
-    def set_channels_info(self, names: str=None, descriptions: str=None, units: str=None, calibrations: float=1):
+    def set_channel_info(self, names: str=None, descriptions: str=None, units: str=None, calibrations: float=1):
         for i,channel in enumerate(self.channel):
             channel.set_channel_info(
                 name = names[i],
@@ -28,56 +35,45 @@ class Test:
                 unit = units[i],
                 calibration = calibrations[i])
 
-    def read_equals(self, filename):
+    def read_equals(self, filename: str):
         imported_data = sp.io.loadmat(filename)
-        self.name = filename
-        self.description = "Project reference: " + imported_data['P_ref'][0]
-        self.filename = imported_data['File_name'][0]
-        self.time = imported_data['Testdate'][0] + imported_data['Time'][0]
-        self.no_channels = imported_data['No_Channels'][0][0]
-        time = imported_data['t'].flatten()
-        self.channel = [ Channel() for _ in range(int(self.no_channels)) ]
-        for i,channel in enumerate(self.channel):
-            channel.set_channel_data(raw_time = time, raw_data=imported_data[f'chan{i+1}'].flatten())
+        self.set_test_info(
+            name = filename.split("/")[-1].split(".")[0],
+            description = "Project reference: " + imported_data['P_ref'][0],
+            filename = imported_data['File_name'][0],
+            time = imported_data['Testdate'][0] + imported_data['Time'][0],
+            no_channels = imported_data['No_Channels'][0][0]
+        )
+        for i in range(self.no_channels):
+            self.add_channel()
+            self.channel[i].set_channel_data(
+                raw_time = imported_data['t'].flatten(),
+                raw_data = imported_data[f'chan{i+1}'].flatten()
+            )
     
     def remove_offset(self, points: int=1000):
         for channel in self.channel:
             channel.remove_offset(points=points)
     
-    def trim(self, start: int=None, end: int=None, ratio: float=0.05, max_threshold: float=0.01,
+    def trim_threshold(self, start: int=None, end: int=None, ratio: float=0.05, max_threshold: float=0.01,
         buffer: int=100, time_shift: bool=True):
-            [start_0,end_0] = self.channel[0].trim(start=start, end=end, ratio=ratio,
+            [start_0,end_0] = self.channel[0].trim_threshold(start=start, end=end, ratio=ratio,
                 max_threshold=max_threshold, buffer=buffer, time_shift=time_shift)  
             for channel in self.channel[1:]:
-                channel.trim(start=start_0, end=end_0, time_shift=time_shift)
+                channel.trim_threshold(start=start_0, end=end_0, time_shift=time_shift)
 
-    def plot_timehistories(self, channels: np.ndarray = None, columns: int = 1):
+    def plot(self, channels: np.ndarray = None, columns: int = 1, plot_type: str="Timehistory", **kwargs):
         if channels is None:
             channels = np.arange(self.no_channels)
         no_channels = len(channels)
         rows = -(-no_channels // columns)
-        fig, axs = plt.subplots(rows, columns, sharex=True, sharey=True)
-        fig.suptitle(self.name)
-        fig.set_tight_layout(True)
-        for idx, ax in enumerate(axs.flat):
-            if idx < no_channels:
-                channel = self.channel[channels[idx]]
-                channel.plot_timehistory(ax)
-        return axs
-
-    def plot_fourier(self, channels: np.ndarray = None, columns: int = 1, xlim: float = 50):
-        if channels is None:
-            channels = np.arange(self.no_channels)
-        no_channels = len(channels)
-        rows = -(-no_channels // columns)
-        fig, axs = plt.subplots(rows, columns, sharex=True, sharey=True)
-        fig.suptitle(self.name)
-        fig.set_tight_layout(True)
-        for idx, ax in enumerate(axs.flat):
-            if idx < no_channels:
-                channel = self.channel[channels[idx]]
-                channel.plot_fourier(ax, xlim=xlim)
-        return axs
+        figure, axes = plt.subplots(rows, columns, sharex=True, sharey=True)
+        figure.suptitle(self.name)
+        figure.set_tight_layout(True)
+        for i, axis in enumerate(axes.flat):
+            if i < no_channels:
+                self.channel[channels[i]].plot(axis=axis, plot_type=plot_type, **kwargs)
+        return axes
 
 
 class Channel:
@@ -104,7 +100,7 @@ class Channel:
     def remove_offset(self, points: int=1000):
         self._data = self._raw_data - np.average(self._raw_data[:points])
 
-    def trim(self, start: int=None, end: int=None, ratio: float=0.05, max_threshold: float=0.01,
+    def trim_threshold(self, start: int=None, end: int=None, ratio: float=0.05, max_threshold: float=0.01,
         buffer: int=100, time_shift: bool=True):
         if start == None or end == None:
             min_threshold = ratio * np.amax(np.abs(self._data))
@@ -131,24 +127,24 @@ class Channel:
         s = np.abs( np.fft.rfft(a=y, n=no_f) )
         f = np.fft.rfftfreq(n=no_f,d=dt)
         return np.array([f,s])
-    
-    def plot_timehistory(self, ax=None):
-        if ax == None:
-            fig, ax = plt.subplots()
-        [t,y] = self.timehistory()
-        ax.plot(t,y)
-        ax.set_xlabel("Time (sec)")
-        ax.set_ylabel(self.name + " (" + self.unit + ")")
-        ax.grid()
-        return ax
 
-    def plot_fourier(self, ax=None, xlim: float=50):
-        if ax == None:
-            fig, ax = plt.subplots()
-        [f,s] = self.fourier()
-        ax.plot(f,s)
-        ax.set_xlabel("Frequency (Hz)")
-        ax.set_ylabel(self.name)
-        ax.set_xlim(0,xlim)
-        ax.grid()
-        return ax
+    def plot(self, plot_type: str="Timehistory", axis=None, **kwargs):
+        if axis == None:
+            figure, axis = plt.subplots()
+        match plot_type:
+            case "Timehistory":
+                [x,y] = self.timehistory()
+                axis.set_xlabel("Time (sec)")
+                axis.set_ylabel(self.name + " (" + self.unit + ")")
+            case "Fourier":
+                [x,y] = self.fourier()
+                axis.set_xlabel("Frequency (Hz)")
+                axis.set_ylabel(self.name)
+                if "xlim" in kwargs:
+                    xlim = kwargs["xlim"]
+                else:
+                    xlim = 50
+                axis.set_xlim(0,xlim)
+        axis.plot(x,y)
+        axis.grid()
+        return axis
