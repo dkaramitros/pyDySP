@@ -55,12 +55,10 @@ class Test:
         for channel in self.channel:
             channel.remove_offset(points=points)
     
-    def trim_threshold(self, start: int=None, end: int=None, ratio: float=0.05, max_threshold: float=0.01,
-        buffer: int=100, time_shift: bool=True):
-            [start_0,end_0] = self.channel[0].trim_threshold(start=start, end=end, ratio=ratio,
-                max_threshold=max_threshold, buffer=buffer, time_shift=time_shift)  
+    def trim_threshold(self, **kwargs):
+            [start_0,end_0] = self.channel[0].trim_threshold(**kwargs)
             for channel in self.channel[1:]:
-                channel.trim_threshold(start=start_0, end=end_0, time_shift=time_shift)
+                channel.trim_points(start=start_0, end=end_0, **kwargs)
 
     def plot(self, channels: np.ndarray = None, columns: int = 1, plot_type: str="Timehistory", **kwargs):
         if channels is None:
@@ -100,18 +98,23 @@ class Channel:
     def remove_offset(self, points: int=1000):
         self._data = self._raw_data - np.average(self._raw_data[:points])
 
-    def trim_threshold(self, start: int=None, end: int=None, ratio: float=0.05, max_threshold: float=0.01,
-        buffer: int=100, time_shift: bool=True):
-        if start == None or end == None:
-            min_threshold = ratio * np.amax(np.abs(self._data))
-            max_threshold /= self.calibration
-            threshold = min([min_threshold, max_threshold])
-            start = max([np.argmax(np.abs(self._data) > threshold) - buffer, 0])
-            end = np.size(self._data) - max([np.argmax(np.abs(np.flip(self._data)) > threshold) - buffer, 0]) 
+    def trim_points(self, start: int=None, end: int=None, buffer: int=100, time_shift: bool=True):
+        start = max([start - buffer, 0])
+        end = min([end + buffer, np.size(self._time)])
         self._time = self._time[start:end]
         self._data = self._data[start:end]
         if time_shift == True:
             self._time -= self._time[0]
+        return [start,end]
+
+    def trim_threshold(self, ratio: float=0.05, max_threshold: float=0.01, **kwargs):
+        threshold = min([
+            ratio * np.amax(np.abs(self._data)),
+            max_threshold / self.calibration
+        ])
+        start = np.argmax(np.abs(self._data) > threshold)
+        end = np.size(self._data) - np.argmax(np.abs(np.flip(self._data)) > threshold)
+        self.trim_points(start=start, end=end, **kwargs)
         return [start,end]
 
     def timehistory(self):
