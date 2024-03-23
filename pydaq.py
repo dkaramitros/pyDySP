@@ -62,8 +62,7 @@ class Test:
             for channel in self.channel[1:]:
                 channel.trim(trim_method="Points", start=start_0, end=end_0, **kwargs)
 
-    def plot(self, channels: np.ndarray = None, columns: int = 1, plot_type: str="Timehistory",
-        description: bool=False, **kwargs):
+    def plot(self, channels: np.ndarray = None, columns: int = 1, description: bool=False, **kwargs):
         if channels is None:
             channels = np.arange(self.no_channels)
         no_channels = len(channels)
@@ -73,7 +72,7 @@ class Test:
         figure.set_tight_layout(True)
         for i, axis in enumerate(axes.flat):
             if i < no_channels:
-                self.channel[channels[i]].plot(axis=axis, plot_type=plot_type, **kwargs)
+                self.channel[channels[i]].plot(axis=axis, **kwargs)
         return axes
 
 
@@ -113,8 +112,8 @@ class Channel:
         self._points = self._raw_points
         self._timestep = self._raw_timestep
 
-    def baseline(self, points: int=1000):
-        self._data = self._raw_data - np.average(self._raw_data[:points])
+    def baseline(self, **kwargs):
+        self._data = sp.signal.detrend(self._raw_data, **kwargs)
 
     def trim(self, buffer: int=100, time_shift: bool=True, trim_method: str="Threshold",
         start: int=0, end: int=0, threshold_ratio: float=0.05, threshold_acc: float=0.01):
@@ -153,6 +152,10 @@ class Channel:
         f = np.fft.rfftfreq(n=_no_freqs, d=self._timestep)
         return np.array([f,s])
 
+    def welch(self):
+        [f,p] = sp.signal.welch(x=self._data, fs=1/self._timestep)
+        return np.array([f,p])
+
     def arias(self, g: float=9.81):
         arias = sp.integrate.cumulative_trapezoid(
             x=self._time,
@@ -167,6 +170,7 @@ class Channel:
     def plot(self, plot_type: str="Timehistory", name: bool=True, description: bool=True, axis=None, **kwargs):
         if axis == None:
             figure, axis = plt.subplots()
+        freq_plot = False
         match plot_type:
             case "Timehistory":
                 [x,y] = self.timehistory()
@@ -176,15 +180,22 @@ class Channel:
                 [x,y] = self.fourier()
                 xlabel = "Frequency (Hz)"
                 ydesc = "Fourier Amplitude"
-                if "xlim" in kwargs:
-                    xlim = kwargs["xlim"]
-                else:
-                    xlim = 50
-                axis.set_xlim(0,xlim)
+                freq_plot = True
+            case "Power":
+                [x,y] = self.welch()
+                xlabel = "Frequency (Hz)"
+                ydesc = "Power Spectral Density"
+                freq_plot = True
             case "Arias":
                 [x,y] = self.arias()[2]
                 xlabel = "Time (sec)"
                 ydesc = "Arias Intensity (m/s)"
+        if freq_plot:
+            if "xlim" in kwargs:
+                xlim = kwargs["xlim"]
+            else:
+                xlim = 50
+            axis.set_xlim(0,xlim)        
         axis.plot(x,y)
         ylabel = ""
         if name:
