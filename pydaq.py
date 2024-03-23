@@ -62,7 +62,7 @@ class Test:
             for channel in self.channel[1:]:
                 channel.trim(trim_method="Points", start=start_0, end=end_0, **kwargs)
 
-    def plot(self, channels: np.ndarray = None, columns: int = 1, description: bool=False, **kwargs):
+    def plot(self, channels: np.ndarray=None, columns: int=1, description: bool=False, **kwargs):
         if channels is None:
             channels = np.arange(self.no_channels)
         no_channels = len(channels)
@@ -72,8 +72,33 @@ class Test:
         figure.set_tight_layout(True)
         for i, axis in enumerate(axes.flat):
             if i < no_channels:
-                self.channel[channels[i]].plot(axis=axis, **kwargs)
+                self.channel[channels[i]].plot(axis=axis, description=description, **kwargs)
         return axes
+    
+    def transfer(self, channel_from: int=0, channel_to: int=1, h_method: int=1,
+        plot: bool=True, axis=None, xlim: float=50, **kwargs):
+        if h_method == 1:
+            [f,Pxy] = sp.signal.csd(x=self.channel[channel_from]._data, y=self.channel[channel_to]._data,
+                fs=1/self.channel[channel_from]._timestep, **kwargs)
+            [_,Pxx] = sp.signal.welch(x=self.channel[channel_from]._data,
+                fs=1/self.channel[channel_from]._timestep, **kwargs)
+            transfer = np.abs(Pxy / Pxx)
+        else:
+            [f,Pyy] = sp.signal.welch(x=self.channel[channel_to]._data,
+                fs=1/self.channel[channel_from]._timestep, **kwargs)
+            [_,Pxy] = sp.signal.csd(x=self.channel[channel_from]._data, y=self.channel[channel_to]._data,
+                fs=1/self.channel[channel_from]._timestep, **kwargs)
+            transfer = np.abs(Pyy / Pxy)
+        if plot:
+            if axis == None:
+                figure, axis = plt.subplots()
+            axis.plot(f,transfer,label=self.name)
+            axis.set_xlabel("Frequency (Hz)")
+            axis.set_ylabel("Transfer Function "+self.channel[channel_to].name+"/"+self.channel[channel_from].name)
+            axis.set_xlim(0,xlim)        
+            return axis
+        else:
+            return [f,transfer]
 
 
 class Channel:
