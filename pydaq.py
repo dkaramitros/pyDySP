@@ -196,7 +196,7 @@ class Channel:
         return np.array([t,y]), [t_max,y_max]
     
     def fourier(self):
-        [t,y] = self.timehistory()
+        [t,y] = self.timehistory()[0]
         _no_freqs = int( 2**(self._points-1).bit_length() )
         f = np.fft.rfftfreq(n=_no_freqs, d=self._timestep)
         s = np.abs( np.fft.rfft(a=y, n=_no_freqs) )
@@ -226,8 +226,6 @@ class Channel:
     def plot(self, plot_type: str="Timehistory", name: bool=True, description: bool=True, axis=None, **kwargs):
         if axis == None:
             figure, axis = plt.subplots()
-        x_max = None
-        y_max = None
         freq_plot = False
         match plot_type:
             case "Timehistory":
@@ -263,4 +261,4 @@ class Channel:
         axis.set_xlabel(xlabel)
         axis.set_ylabel(ylabel)
         axis.grid()
-        return axis, [x_max,y_max]
+        return axis
