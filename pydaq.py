@@ -53,6 +53,10 @@ class Test:
     def baseline(self, **kwargs):
         for channel in self.channel:
             channel.baseline(**kwargs)
+
+    def filter(self, **kwargs):
+        for channel in self.channel:
+            channel.filter(**kwargs)
     
     def trim(self, **kwargs):
             [start_0,end_0] = self.channel[0].trim(**kwargs)
@@ -153,6 +157,10 @@ class Channel:
 
     def baseline(self, **kwargs):
         self._data = sp.signal.detrend(self._raw_data, **kwargs)
+
+    def filter(self, order: int=2, cutoff: float=50):
+        b, a = sp.signal.butter(N=order, Wn=cutoff, btype='low', fs=1/self._timestep)
+        self._data = sp.signal.filtfilt(b, a, self._data)
 
     def trim(self, buffer: int=100, time_shift: bool=True, trim_method: str="Threshold",
         start: int=0, end: int=0, threshold_ratio: float=0.05, threshold_acc: float=0.01):
