@@ -1,4 +1,4 @@
-### pyDAQ
+# pyDAQ
 
 Data Acquisition with Python
 
@@ -10,8 +10,8 @@ Python classes used to process laboratory data from the Shaking Table experiment
 
 The file `pydaq.py` includes two classes:
 
-The `Test` class provides methods to add, manage, and plot data from multiple channels. Transfer functions can also be produced and analyzed.
+- The `Test` class provides methods to add, manage, and plot data from multiple channels. Transfer functions can also be produced and analyzed.
 
-The `Channel` class provides methods for signal processing, including baseline correction, filtering, and trimming. Plotting methods are also provided.
+- The `Channel` class provides methods for signal processing, including baseline correction, filtering, and trimming. Plotting methods are also provided.
 
-Example Jupyter notebooks are provided.
+Example Jupyter notebooks are also provided.
