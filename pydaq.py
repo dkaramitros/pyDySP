@@ -116,7 +116,7 @@ class Test:
             f_2 = sp.optimize.root_scalar(eqn, bracket=[f_n,2*f_n], method='bisect').root
             ksi = (f_2-f_1) / (2*f_n)
             axis.plot([f_1,f_2], [t_hb,t_hb], "--", color=base_plot.get_color())
-        return axis,f,t,f_n,ksi
+        return axis,[f,t],[f_n,t_n],ksi
 
 
 class Channel:
@@ -190,18 +190,27 @@ class Channel:
     def timehistory(self):
         t = self._time
         y = self._data / self.calibration
-        return np.array([t, y])
+        index = np.argmax(np.abs(y))
+        t_max = t[index]
+        y_max = y[index]
+        return np.array([t,y]), [t_max,y_max]
     
     def fourier(self):
         [t,y] = self.timehistory()
         _no_freqs = int( 2**(self._points-1).bit_length() )
-        s = np.abs( np.fft.rfft(a=y, n=_no_freqs) )
         f = np.fft.rfftfreq(n=_no_freqs, d=self._timestep)
-        return np.array([f,s])
+        s = np.abs( np.fft.rfft(a=y, n=_no_freqs) )
+        index = np.argmax(f)
+        f_n = f[index]
+        s_max = s[index]
+        return np.array([f,s]), [f_n,s_max]
 
     def welch(self):
         [f,p] = sp.signal.welch(x=self._data, fs=1/self._timestep)
-        return np.array([f,p])
+        index = np.argmax(f)
+        f_n = f[index]
+        p_max = p[index]
+        return np.array([f,p]), [f_n,p_max]
 
     def arias(self, g: float=9.81):
         arias = sp.integrate.cumulative_trapezoid(
@@ -212,29 +221,31 @@ class Channel:
         start = np.argmax(arias > 0.05*arias[-1])
         end = np.argmax(arias > 0.95*arias[-1])
         duration = self._time[end] - self._time[start]
-        return arias[-1], duration, [self._time,arias], [start,end]
+        return [self._time,arias], arias[-1], duration, [start,end]
 
     def plot(self, plot_type: str="Timehistory", name: bool=True, description: bool=True, axis=None, **kwargs):
         if axis == None:
             figure, axis = plt.subplots()
+        x_max = None
+        y_max = None
         freq_plot = False
         match plot_type:
             case "Timehistory":
-                [x,y] = self.timehistory()
+                [x,y] = self.timehistory()[0]
                 xlabel = "Time (sec)"
                 ydesc = "Timehistory (" + self.unit + ")"
             case "Fourier":
-                [x,y] = self.fourier()
+                [x,y] = self.fourier()[0]
                 xlabel = "Frequency (Hz)"
                 ydesc = "Fourier Amplitude"
                 freq_plot = True
             case "Power":
-                [x,y] = self.welch()
+                [x,y] = self.welch()[0]
                 xlabel = "Frequency (Hz)"
                 ydesc = "Power Spectral Density"
                 freq_plot = True
             case "Arias":
-                [x,y] = self.arias()[2]
+                [x,y] = self.arias()[0]
                 xlabel = "Time (sec)"
                 ydesc = "Arias Intensity (m/s)"
         if freq_plot:
@@ -252,4 +263,4 @@ class Channel:
         axis.set_xlabel(xlabel)
         axis.set_ylabel(ylabel)
         axis.grid()
-        return axis
+        return axis, [x_max,y_max]
