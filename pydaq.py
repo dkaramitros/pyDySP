@@ -205,8 +205,8 @@ class Channel:
         s_max = s[index]
         return np.array([f,s]), [f_n,s_max]
 
-    def welch(self):
-        [f,p] = sp.signal.welch(x=self._data, fs=1/self._timestep)
+    def welch(self, **kwargs):
+        [f,p] = sp.signal.welch(x=self._data, fs=1/self._timestep, **kwargs)
         index = np.argmax(f)
         f_n = f[index]
         p_max = p[index]
@@ -238,7 +238,7 @@ class Channel:
                 ydesc = "Fourier Amplitude"
                 freq_plot = True
             case "Power":
-                [x,y] = self.welch()[0]
+                [x,y] = self.welch(**kwargs)[0]
                 xlabel = "Frequency (Hz)"
                 ydesc = "Power Spectral Density"
                 freq_plot = True
