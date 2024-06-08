@@ -20,7 +20,7 @@ class Channel:
             raw_data=np.zeros(2)
         )
     
-    def set_channel_info(self, name: str=None, description: str=None, unit: str=None, calibration: float=None):
+    def set_channel_info(self, name: str = None, description: str = None, unit: str = None, calibration: float = None) -> None:
         """
         Sets the channel information.
 
@@ -39,7 +39,7 @@ class Channel:
         if calibration is not None:
             self.calibration = calibration
 
-    def set_channel_data(self, raw_time: np.ndarray, raw_data: np.ndarray):
+    def set_channel_data(self, raw_time: np.ndarray, raw_data: np.ndarray) -> None:
         """
         Sets the raw time and data for the channel.
 
@@ -63,7 +63,7 @@ class Channel:
         self._points = np.size(self._time)
         self._timestep = self._time[1] - self._time[0]
 
-    def reset_raw_data(self):
+    def reset_raw_data(self) -> None:
         """
         Resets the processed data to the raw data.
         """
@@ -72,7 +72,7 @@ class Channel:
         self._points = self._raw_points
         self._timestep = self._raw_timestep
 
-    def baseline(self, **kwargs):
+    def baseline(self, **kwargs) -> None:
         """
         Removes the linear trend from the raw data using scipy.signal.detrend.
 
@@ -81,7 +81,7 @@ class Channel:
         """
         self._data = detrend(self._raw_data, **kwargs)
 
-    def filter(self, order: int=2, cutoff: float=50):
+    def filter(self, order: int = 2, cutoff: float = 50) -> None:
         """
         Applies a low-pass Butterworth filter to the data.
 
@@ -92,8 +92,8 @@ class Channel:
         b, a = butter(N=order, Wn=cutoff, btype='low', fs=1/self._timestep)
         self._data = filtfilt(b, a, self._data)
 
-    def trim(self, buffer: int=100, time_shift: bool=True, trim_method: str="Threshold",
-             start: int=0, end: int=0, threshold_ratio: float=0.05, threshold_acc: float=0.01):
+    def trim(self, buffer: int = 100, time_shift: bool = True, trim_method: str = "Threshold",
+             start: int = 0, end: int = 0, threshold_ratio: float = 0.05, threshold_acc: float = 0.01) -> list[int]:
         """
         Trims the data based on the specified method.
 
@@ -137,7 +137,7 @@ class Channel:
             self._time -= self._time[0]
         return [start, end]
 
-    def timehistory(self):
+    def timehistory(self) -> tuple[np.ndarray, list[float]]:
         """
         Returns the time history data.
 
@@ -152,7 +152,7 @@ class Channel:
         y_max = y[index]
         return np.array([t, y]), [t_max, y_max]
     
-    def fourier(self):
+    def fourier(self) -> tuple[np.ndarray, list[float]]:
         """
         Computes the Fourier transform of the data.
 
@@ -169,7 +169,7 @@ class Channel:
         s_max = s[index]
         return np.array([f, s]), [f_n, s_max]
 
-    def welch(self, **kwargs):
+    def welch(self, **kwargs) -> tuple[np.ndarray, list[float]]:
         """
         Computes the Power Spectral Density using Welch's method.
 
@@ -186,7 +186,7 @@ class Channel:
         p_max = p[index]
         return np.array([f, p]), [f_n, p_max]
 
-    def arias(self, g: float=9.81):
+    def arias(self, g: float = 9.81) -> tuple[list[np.ndarray, np.ndarray], float, float, list[int]]:
         """
         Computes the Arias intensity of the data.
 
@@ -206,7 +206,7 @@ class Channel:
         duration = self._time[end] - self._time[start]
         return [self._time, arias], arias[-1], duration, [start, end]
 
-    def plot(self, plot_type: str="Timehistory", name: bool=True, description: bool=True, axis=None, **kwargs):
+    def plot(self, plot_type: str = "Timehistory", name: bool = True, description: bool = True, axis = None, **kwargs) -> plt.Axes:
         """
         Plots the data based on the specified plot type.
 
@@ -237,4 +237,24 @@ class Channel:
                 [x, y] = self.welch(**kwargs)[0]
                 xlabel = "Frequency (Hz)"
                 ydesc = "Power Spectral Density"
-                freq_plot
+                freq_plot = True
+            case "Arias":
+                [x, y] = self.arias()[0]
+                xlabel = "Time (sec)"
+                ydesc = "Arias Intensity (m/s)"
+        if freq_plot:
+            if "xlim" in kwargs:
+                xlim = kwargs["xlim"]
+            else:
+                xlim = 50
+            axis.set_xlim(0, xlim)        
+        axis.plot(x, y)
+        ylabel = ""
+        if name:
+            ylabel += self.name
+        if description:
+            ylabel += " " + ydesc
+        axis.set_xlabel(xlabel)
+        axis.set_ylabel(ylabel)
+        axis.grid()
+        return axis
