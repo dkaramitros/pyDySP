@@ -74,8 +74,14 @@ class Test:
 
         Parameters:
         filename (str): Path to the .mat file.
+        
+        Raises:
+        FileNotFoundError: If the specified file does not exist.
         """
-        imported_data = sp.io.loadmat(filename)
+        try:
+            imported_data = sp.io.loadmat(filename)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"File '{filename}' not found.")
         self.set_test_info(
             name=filename.split("/")[-1].split(".")[0],
             description="Project reference: " + imported_data['P_ref'][0],
