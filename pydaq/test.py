@@ -195,6 +195,9 @@ class Test:
             t = np.abs(Pyy / Pxy)
         base_plot, = axis.plot(f, t, label=self.name)
         # Peak
+        f_n = 0
+        t_n = 0
+        ksi = 0
         if find_peak or find_damping:
             index_n = np.argmax(t)
             f_n = f[index_n]
