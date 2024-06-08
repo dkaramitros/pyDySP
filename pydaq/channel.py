@@ -2,6 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import detrend, butter, filtfilt, welch
 from scipy.integrate import cumulative_trapezoid
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 
 class Channel:
     
@@ -9,6 +13,7 @@ class Channel:
         """
         Initializes the Channel instance with default values.
         """
+        logging.info("Initializing Channel with default values.")
         self.set_channel_info(
             name="Default channel",
             description="This is the default channel.",
@@ -38,6 +43,7 @@ class Channel:
             self.unit = unit
         if calibration is not None:
             self.calibration = calibration
+        logging.info(f"Channel info set: {self.name}, {self.description}, {self.unit}, {self.calibration}")
 
     def set_channel_data(self, raw_time: np.ndarray, raw_data: np.ndarray) -> None:
         """
@@ -62,6 +68,7 @@ class Channel:
         self._data = raw_data
         self._points = np.size(self._time)
         self._timestep = self._time[1] - self._time[0]
+        logging.info("Channel data set.")
 
     def reset_raw_data(self) -> None:
         """
@@ -71,6 +78,7 @@ class Channel:
         self._data = self._raw_data
         self._points = self._raw_points
         self._timestep = self._raw_timestep
+        logging.info("Raw data reset.")
 
     def baseline(self, **kwargs) -> None:
         """
@@ -80,6 +88,7 @@ class Channel:
         **kwargs: Additional keyword arguments to pass to scipy.signal.detrend.
         """
         self._data = detrend(self._raw_data, **kwargs)
+        logging.info("Baseline correction applied.")
 
     def filter(self, order: int = 2, cutoff: float = 50) -> None:
         """
@@ -91,6 +100,7 @@ class Channel:
         """
         b, a = butter(N=order, Wn=cutoff, btype='low', fs=1/self._timestep)
         self._data = filtfilt(b, a, self._data)
+        logging.info(f"Data filtered with Butterworth filter (order={order}, cutoff={cutoff} Hz).")
 
     def trim(self, buffer: int = 100, time_shift: bool = True, trim_method: str = "Threshold",
              start: int = 0, end: int = 0, threshold_ratio: float = 0.05, threshold_acc: float = 0.01) -> list[int]:
@@ -135,6 +145,7 @@ class Channel:
         self._points = np.size(self._time)
         if time_shift:
             self._time -= self._time[0]
+        logging.info(f"Data trimmed using method '{trim_method}' with buffer {buffer} and time_shift={time_shift}.")
         return [start, end]
 
     def timehistory(self) -> tuple[np.ndarray, list[float]]:
@@ -150,6 +161,7 @@ class Channel:
         index = np.argmax(np.abs(y))
         t_max = t[index]
         y_max = y[index]
+        logging.info("Time history data retrieved.")
         return np.array([t, y]), [t_max, y_max]
     
     def fourier(self) -> tuple[np.ndarray, list[float]]:
@@ -167,6 +179,7 @@ class Channel:
         index = np.argmax(f)
         f_n = f[index]
         s_max = s[index]
+        logging.info("Fourier transform computed.")
         return np.array([f, s]), [f_n, s_max]
 
     def welch(self, **kwargs) -> tuple[np.ndarray, list[float]]:
@@ -184,6 +197,7 @@ class Channel:
         index = np.argmax(f)
         f_n = f[index]
         p_max = p[index]
+        logging.info("Power Spectral Density computed using Welch's method.")
         return np.array([f, p]), [f_n, p_max]
 
     def arias(self, g: float = 9.81) -> tuple[list[np.ndarray, np.ndarray], float, float, list[int]]:
@@ -191,37 +205,41 @@ class Channel:
         Computes the Arias intensity of the data.
 
         Parameters:
-        g (float): Gravitational acceleration constant.
+        g (float): Gravitational constant for the Arias intensity calculation.
 
         Returns:
-        tuple: Time, Arias intensity values, final Arias intensity, duration, and start/end indices.
+        list: Time values and Arias intensity values.
+        float: Final Arias intensity value.
+        float: Duration of the significant shaking.
+        list: Start and end indices for the significant shaking period.
         """
         arias = cumulative_trapezoid(
             x=self._time,
-            y=np.pi / 2 / 9.81 * (g * self._data / self.calibration) ** 2
+            y=np.pi / 2 / 9.81 * (g * self._data / self.calibration) ** 2,
+            initial=0
         )
-        arias = np.append(arias, arias[-1])
         start = np.argmax(arias > 0.05 * arias[-1])
         end = np.argmax(arias > 0.95 * arias[-1])
         duration = self._time[end] - self._time[start]
+        logging.info("Arias intensity computed.")
         return [self._time, arias], arias[-1], duration, [start, end]
 
-    def plot(self, plot_type: str = "Timehistory", name: bool = True, description: bool = True, axis = None, **kwargs) -> plt.Axes:
+    def plot(self, plot_type: str = "Timehistory", name: bool = True, description: bool = True, axis=None, **kwargs) -> plt.Axes:
         """
-        Plots the data based on the specified plot type.
+        Plots the specified type of data.
 
         Parameters:
         plot_type (str): Type of plot ('Timehistory', 'Fourier', 'Power', 'Arias').
-        name (bool): If True, includes the name in the plot label.
-        description (bool): If True, includes the description in the plot label.
-        axis: Matplotlib axis to plot on.
-        **kwargs: Additional keyword arguments for plotting.
+        name (bool): If True, includes the channel name in the ylabel.
+        description (bool): If True, includes the data description in the ylabel.
+        axis: Matplotlib axis to plot on. If None, creates a new axis.
+        **kwargs: Additional keyword arguments for the plot.
 
         Returns:
-        axis: The axis with the plot.
+        plt.Axes: The axis with the plotted data.
         """
         if axis is None:
-            figure, axis = plt.subplots()
+            _, axis = plt.subplots()
         freq_plot = False
         match plot_type:
             case "Timehistory":
@@ -242,12 +260,10 @@ class Channel:
                 [x, y] = self.arias()[0]
                 xlabel = "Time (sec)"
                 ydesc = "Arias Intensity (m/s)"
+            case _:
+                raise ValueError(f"Unknown plot_type: {plot_type}")
         if freq_plot:
-            if "xlim" in kwargs:
-                xlim = kwargs["xlim"]
-            else:
-                xlim = 50
-            axis.set_xlim(0, xlim)        
+            axis.set_xlim(0, kwargs.get("xlim", 50))
         axis.plot(x, y)
         ylabel = ""
         if name:
@@ -257,4 +273,5 @@ class Channel:
         axis.set_xlabel(xlabel)
         axis.set_ylabel(ylabel)
         axis.grid()
+        logging.info(f"{plot_type} plot created.")
         return axis
