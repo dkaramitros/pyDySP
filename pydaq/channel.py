@@ -203,6 +203,7 @@ class Channel:
             x=self._time,
             y=np.pi / 2 / 9.81 * (g * self._data / self.calibration) ** 2
         )
+        arias = np.append(arias,arias[-1])
         start = np.argmax(arias > 0.05 * arias[-1])
         end = np.argmax(arias > 0.95 * arias[-1])
         duration = self._time[end] - self._time[start]

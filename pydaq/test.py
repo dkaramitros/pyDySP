@@ -5,6 +5,7 @@ from scipy.signal import csd, welch
 from scipy.integrate import cumulative_trapezoid
 from scipy.optimize import root_scalar
 from scipy import interpolate, optimize
+from . import channel
 
 class Test:
     
