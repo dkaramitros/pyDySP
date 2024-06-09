@@ -158,61 +158,66 @@ class Test:
                 self.channel[channels[i]].plot(axis=axis, description=description, **kwargs)
         return axes
     
-    def transfer_function(self, channel_from: int = 0, channel_to: int = 1, h_method: int = 1, axis=None,
-        find_peak: bool = True, find_damping: bool = True, xlim: float = 50, **kwargs) -> tuple:
+    def transfer_function(self, channel_from: int=0, channel_to: int=1, h_method: int=1, axis=None, xlim: float=50,
+        find_peak: bool=True, find_damping: bool=True, f_min: float=0, f_max: float=50, **kwargs):
         """
-        Compute and plot the transfer function between two channels.
+        Compute and plot the transfer function between two channels, optionally finding the peak
+        and damping within a specified frequency range.
 
         Parameters:
-        channel_from (int): Index of the source channel.
-        channel_to (int): Index of the destination channel.
-        h_method (int): Method to compute transfer function (1 for CSD, 2 for Welch).
-        axis: Matplotlib axis to plot on. If None, creates a new axis.
-        find_peak (bool): If True, finds and marks the peak in the transfer function plot.
-        find_damping (bool): If True, finds and marks the damping in the transfer function plot.
-        xlim (float): Limit of x-axis in the plot.
-        **kwargs: Additional keyword arguments to pass to the computation methods.
+        channel_from (int): Index of the channel from which data is taken.
+        channel_to (int): Index of the channel to which data is compared.
+        h_method (int): Method to compute the transfer function (1 or 2).
+        axis (matplotlib.axes._axes.Axes, optional): Axis on which to plot the transfer function.
+        xlim (float): x-axis limit for the plot.
+        find_peak (bool): Whether to find and mark the peak of the transfer function.
+        find_damping (bool): Whether to find and mark the damping.
+        f_min (float): Minimum frequency for the peak search range.
+        f_max (float): Maximum frequency for the peak search range.
+        **kwargs: Additional keyword arguments for signal processing functions.
 
         Returns:
-        tuple: Axis object, frequency and transfer function data, peak frequency and amplitude, damping ratio.
+        tuple: axis, transfer function data (frequencies and values), peak frequency and value, damping ratio
         """
         if axis is None:
-            figure, axis = plt.subplots()
+            _, axis = plt.subplots()
         axis.set_xlabel("Frequency (Hz)")
-        axis.set_ylabel("Transfer Function "+self.channel[channel_to].name+"/"+self.channel[channel_from].name)
+        axis.set_ylabel(f"Transfer Function {self.channel[channel_to].name}/{self.channel[channel_from].name}")
         axis.set_xlim(0, xlim)
         axis.grid()
-        # Transfer function
+        # Compute transfer function
+        fs = 1 / self.channel[channel_from]._timestep
+        x_data = self.channel[channel_from]._data
+        y_data = self.channel[channel_to]._data
         if h_method == 1:
-            [f, Pxy] = csd(x=self.channel[channel_from]._data, y=self.channel[channel_to]._data,
-                fs=1/self.channel[channel_from]._timestep, **kwargs)
-            [_, Pxx] = welch(x=self.channel[channel_from]._data,
-                fs=1/self.channel[channel_from]._timestep, **kwargs)
+            f, Pxy = sp.signal.csd(x=x_data, y=y_data, fs=fs, **kwargs)
+            _, Pxx = sp.signal.welch(x=x_data, fs=fs, **kwargs)
             t = np.abs(Pxy / Pxx)
         else:
-            [f, Pyy] = welch(x=self.channel[channel_to]._data,
-                fs=1/self.channel[channel_from]._timestep, **kwargs)
-            [_, Pxy] = csd(x=self.channel[channel_from]._data, y=self.channel[channel_to]._data,
-                fs=1/self.channel[channel_from]._timestep, **kwargs)
+            f, Pyy = sp.signal.welch(x=y_data, fs=fs, **kwargs)
+            _, Pxy = sp.signal.csd(x=x_data, y=y_data, fs=fs, **kwargs)
             t = np.abs(Pyy / Pxy)
         base_plot, = axis.plot(f, t, label=self.name)
-        # Peak
-        f_n = 0
-        t_n = 0
-        ksi = 0
+        # Find peak within the specified range
+        f_n, t_n, ksi = None, None, None
         if find_peak or find_damping:
-            index_n = np.argmax(t)
-            f_n = f[index_n]
-            t_n = t[index_n]
-            axis.plot(f_n, t_n, "o", color=base_plot.get_color())
-        # Damping (half-bandwidth method)
-        if find_damping:
-            t_hb = max(t_n / np.sqrt(2), t[0])
-            eqn = interpolate.interp1d(f, t - t_hb)
-            f_1 = optimize.root_scalar(eqn, bracket=[0, f_n], method='bisect').root
-            f_2 = optimize.root_scalar(eqn, bracket=[f_n, 2 * f_n], method='bisect').root
-            ksi = (f_2 - f_1) / (2 * f_n)
-            axis.plot([f_1, f_2], [t_hb, t_hb], "--", color=base_plot.get_color())
+            valid_indices = (f >= f_min) & (f <= f_max)
+            if np.any(valid_indices):
+                peak_index = np.argmax(t[valid_indices])
+                peak_index = np.where(valid_indices)[0][peak_index]
+                f_n, t_n = f[peak_index], t[peak_index]
+                axis.plot(f_n, t_n, "o", color=base_plot.get_color())
+        # Compute damping (half-bandwidth method)
+        if find_damping and f_n is not None:
+            try:
+                t_hb = max(t_n / np.sqrt(2), t[0])
+                eqn = sp.interpolate.interp1d(f, t - t_hb)
+                f_1 = sp.optimize.root_scalar(eqn, bracket=[0, f_n], method='bisect').root
+                f_2 = sp.optimize.root_scalar(eqn, bracket=[f_n, 2*f_n], method='bisect').root
+                ksi = (f_2 - f_1) / (2 * f_n)
+                axis.plot([f_1, f_2], [t_hb, t_hb], "--", color=base_plot.get_color())
+            except ValueError:
+                ksi = None
         return axis, [f, t], [f_n, t_n], ksi
 
     def export_to_csv(self, filename: str) -> None:
