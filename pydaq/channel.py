@@ -72,7 +72,7 @@ class Channel:
         self._points = self._raw_points
         self._timestep = self._raw_timestep
 
-    def baseline(self, **kwargs) -> None:
+    def baseline_correct(self, **kwargs) -> None:
         """
         Removes the linear trend from the raw data using scipy.signal.detrend.
 

@@ -97,7 +97,7 @@ class Test:
                 raw_data=imported_data[f'chan{i+1}'].flatten()
             )
     
-    def baseline(self, **kwargs) -> None:
+    def baseline_correct(self, **kwargs) -> None:
         """
         Apply baseline correction to each channel.
 
@@ -105,7 +105,7 @@ class Test:
         **kwargs: Additional keyword arguments to pass to the baseline method of each channel.
         """
         for channel in self.channel:
-            channel.baseline(**kwargs)
+            channel.baseline_correct(**kwargs)
 
     def filter(self, **kwargs) -> None:
         """
@@ -156,7 +156,7 @@ class Test:
                 self.channel[channels[i]].plot(axis=axis, description=description, **kwargs)
         return axes
     
-    def transfer(self, channel_from: int = 0, channel_to: int = 1, h_method: int = 1, axis=None,
+    def transfer_function(self, channel_from: int = 0, channel_to: int = 1, h_method: int = 1, axis=None,
         find_peak: bool = True, find_damping: bool = True, xlim: float = 50, **kwargs) -> tuple:
         """
         Compute and plot the transfer function between two channels.

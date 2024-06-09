@@ -2,4 +2,6 @@ __pycache__/
 *.m
 *.mat
 *.docx
-test*.*
+*.ipynb
+!example*/*
+!example*
