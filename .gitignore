@@ -5,3 +5,4 @@ __pycache__/
 *.ipynb
 !example*/*
 !example*
+*.csv

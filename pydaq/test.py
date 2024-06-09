@@ -1,3 +1,4 @@
+import csv
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy as sp
@@ -48,8 +49,9 @@ class Test:
         """
         Add a channel to the test.
         """
-        self.no_channels += 1
         self.channel.append(channel.Channel())
+        if self.no_channels < len(self.channel):
+            self.no_channels = len(self.channel)
 
     def set_channel_info(self, names: str = None, descriptions: str = None, units: str = None, calibrations: float = 1) -> None:
         """
@@ -129,7 +131,7 @@ class Test:
             if kwarg in kwargs:
                 del kwargs[kwarg]
         for channel in self.channel[1:]:
-            channel.trim(trim_method="Points", start=start_0, end=end_0, **kwargs)
+            channel.trim(trim_method="Points", start=start_0, end=end_0, buffer=0, **kwargs)
 
     def plot(self, channels: np.ndarray = None, columns: int = 1, description: bool = False, **kwargs) -> plt.Axes:
         """
@@ -212,3 +214,34 @@ class Test:
             ksi = (f_2 - f_1) / (2 * f_n)
             axis.plot([f_1, f_2], [t_hb, t_hb], "--", color=base_plot.get_color())
         return axis, [f, t], [f_n, t_n], ksi
+
+    def export_to_csv(self, filename: str) -> None:
+        """
+        Export the data from all channels to a CSV file.
+
+        Parameters:
+        filename (str): Path to the output CSV file.
+
+        Raises:
+        ValueError: If there are no channels to export.
+        """
+        if self.no_channels == 0:
+            raise ValueError("No channels available to export.")
+        # Prepare header
+        headers = ["Time"]
+        for ch in self.channel:
+            headers.append(ch.name)
+        # Prepare data matrix
+        max_points = max(len(ch._data) for ch in self.channel)
+        data_matrix = np.empty((max_points, self.no_channels + 1))
+        data_matrix[:] = np.nan
+        # Fill time data
+        data_matrix[:, 0] = self.channel[0]._time
+        # Fill channel data
+        for i, ch in enumerate(self.channel):
+            data_matrix[:len(ch._data), i + 1] = ch._data
+        # Write to CSV
+        with open(filename, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(headers)
+            writer.writerows(data_matrix)
