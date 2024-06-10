@@ -71,6 +71,37 @@ class Test:
                 calibration=calibrations[i]
             )
 
+    def get_test_info(self, print_info: bool = True):
+        """
+        Get the test information and optionally print it.
+
+        Parameters:
+        print_info (bool): If True, print the test information. Default is True.
+
+        Returns:
+        list: A list containing the test information.
+        """
+        # Gather the test information
+        info = [
+            self.name,
+            self.description,
+            self.filename,
+            self.time,
+            self.no_channels,
+            [channel.name for channel in self.channel]
+        ]
+        # Print the test information if print_info is True
+        if print_info:
+            print(f"Name: {info[0]}")
+            print(f"Description: {info[1]}")
+            print(f"Filename: {info[2]}")
+            print(f"Time: {info[3]}")
+            print(f"Number of Channels: {info[4]}")
+            print("Channel Names:")
+            for idx, name in enumerate(info[5]):
+                print(f"  {idx}: {name}")
+        return info
+
     def read_equals(self, filename: str) -> None:
         """
         Read data from a .mat file and set test information and channel data accordingly.
