@@ -1,4 +1,4 @@
-# pyDAQ
+# pyDySP
 
 Data Acquisition with Python
 
