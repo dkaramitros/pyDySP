@@ -63,6 +63,33 @@ class Channel:
         self._points = np.size(self._time)
         self._timestep = self._time[1] - self._time[0]
 
+    def get_channel_info(self, print_info: bool = True):
+        """
+        Get the channel information and optionally print it.
+
+        Parameters:
+        print_info (bool): If True, print the channel information. Default is True.
+
+        Returns:
+        list: A list containing the channel information.
+        """
+        info = [
+            self.name,
+            self.description,
+            self.unit,
+            self.calibration,
+            self._timestep,
+            self._points
+        ]
+        if print_info:
+            print(f"Name: {info[0]}")
+            print(f"Description: {info[1]}")
+            print(f"Unit: {info[2]}")
+            print(f"Calibration: {info[3]}")
+            print(f"Timestep: {info[4]}")
+            print(f"Points: {info[5]}")
+        return info
+        
     def reset_raw_data(self) -> None:
         """
         Resets the processed data to the raw data.
