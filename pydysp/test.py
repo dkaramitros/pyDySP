@@ -28,11 +28,11 @@ class Test:
         Set test information.
 
         Parameters:
-        name (str): Name of the test.
-        description (str): Description of the test.
-        filename (str): Filename of the test data.
-        time (str): Time of the test.
-        no_channels (int): Number of channels in the test.
+            name (str): Name of the test.
+            description (str): Description of the test.
+            filename (str): Filename of the test data.
+            time (str): Time of the test.
+            no_channels (int): Number of channels in the test.
         """
         if name is not None:
             self.name = name
@@ -58,10 +58,10 @@ class Test:
         Set information for each channel.
 
         Parameters:
-        names (str): List of names for channels.
-        descriptions (str): List of descriptions for channels.
-        units (str): List of units for channels.
-        calibrations (float): Calibration factor for channels.
+            names (str): List of names for channels.
+            descriptions (str): List of descriptions for channels.
+            units (str): List of units for channels.
+            calibrations (float): Calibration factor for channels.
         """
         for i, channel in enumerate(self.channel):
             channel.set_channel_info(
@@ -76,10 +76,10 @@ class Test:
         Get the test information and optionally print it.
 
         Parameters:
-        print_info (bool): If True, print the test information. Default is True.
+            print_info (bool): If True, print the test information. Default is True.
 
         Returns:
-        list: A list containing the test information.
+            list: A list containing the test information.
         """
         # Gather the test information
         info = [
@@ -107,10 +107,10 @@ class Test:
         Read data from a .mat file and set test information and channel data accordingly.
 
         Parameters:
-        filename (str): Path to the .mat file.
+            filename (str): Path to the .mat file.
         
         Raises:
-        FileNotFoundError: If the specified file does not exist.
+            FileNotFoundError: If the specified file does not exist.
         """
         try:
             imported_data = sp.io.loadmat(filename)
@@ -135,7 +135,7 @@ class Test:
         Apply baseline correction to each channel.
 
         Parameters:
-        **kwargs**: Additional keyword arguments to pass to the baseline method of each channel.
+            **kwargs**: Additional keyword arguments to pass to the baseline method of each channel.
         """
         for channel in self.channel:
             channel.baseline_correct(**kwargs)
@@ -145,7 +145,7 @@ class Test:
         Apply a low-pass Butterworth filter to each channel.
 
         Parameters:
-        **kwargs**: Additional keyword arguments to pass to the filter method of each channel.
+            **kwargs**: Additional keyword arguments to pass to the filter method of each channel.
         """
         for channel in self.channel:
             channel.filter(**kwargs)
@@ -155,7 +155,7 @@ class Test:
         Trim the data for each channel.
 
         Parameters:
-        **kwargs**: Additional keyword arguments to pass to the trim method of each channel.
+            **kwargs**: Additional keyword arguments to pass to the trim method of each channel.
         """
         [start_0,end_0] = self.channel[0].trim(**kwargs)
         for kwarg in ["trim_method", "start", "end"]:
@@ -169,13 +169,13 @@ class Test:
         Plot the data for specified channels.
 
         Parameters:
-        channels (np.ndarray): Array of channel indices to plot.
-        columns (int): Number of columns for subplots.
-        description (bool): If True, includes channel description in plot.
-        **kwargs**: Additional keyword arguments to pass to the plot method of each channel.
+            channels (np.ndarray): Array of channel indices to plot.
+            columns (int): Number of columns for subplots.
+            description (bool): If True, includes channel description in plot.
+            **kwargs**: Additional keyword arguments to pass to the plot method of each channel.
 
         Returns:
-        plt.Axes: The axes object containing the plots.
+            plt.Axes: The axes object containing the plots.
         """
         if channels is None:
             channels = np.arange(self.no_channels)
@@ -196,19 +196,19 @@ class Test:
         and damping within a specified frequency range.
 
         Parameters:
-        channel_from (int): Index of the channel from which data is taken.
-        channel_to (int): Index of the channel to which data is compared.
-        h_method (int): Method to compute the transfer function (1 or 2).
-        axis (matplotlib.axes._axes.Axes, optional): Axis on which to plot the transfer function.
-        xlim (float): x-axis limit for the plot.
-        find_peak (bool): Whether to find and mark the peak of the transfer function.
-        find_damping (bool): Whether to find and mark the damping.
-        f_min (float): Minimum frequency for the peak search range.
-        f_max (float): Maximum frequency for the peak search range.
-        **kwargs**: Additional keyword arguments for signal processing functions.
+            channel_from (int): Index of the channel from which data is taken.
+            channel_to (int): Index of the channel to which data is compared.
+            h_method (int): Method to compute the transfer function (1 or 2).
+            axis (matplotlib.axes._axes.Axes, optional): Axis on which to plot the transfer function.
+            xlim (float): x-axis limit for the plot.
+            find_peak (bool): Whether to find and mark the peak of the transfer function.
+            find_damping (bool): Whether to find and mark the damping.
+            f_min (float): Minimum frequency for the peak search range.
+            f_max (float): Maximum frequency for the peak search range.
+            **kwargs**: Additional keyword arguments for signal processing functions.
 
         Returns:
-        tuple: axis, transfer function data (frequencies and values), peak frequency and value, damping ratio
+            tuple: axis, transfer function data (frequencies and values), peak frequency and value, damping ratio
         """
         if axis is None:
             _, axis = plt.subplots()
@@ -256,10 +256,10 @@ class Test:
         Export the data from all channels to a CSV file.
 
         Parameters:
-        filename (str): Path to the output CSV file.
+            filename (str): Path to the output CSV file.
 
         Raises:
-        ValueError: If there are no channels to export.
+            ValueError: If there are no channels to export.
         """
         if self.no_channels == 0:
             raise ValueError("No channels available to export.")

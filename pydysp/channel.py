@@ -25,10 +25,10 @@ class Channel:
         Sets the channel information.
 
         Parameters:
-        name (str): Name of the channel.
-        description (str): Description of the channel.
-        unit (str): Unit of measurement for the data.
-        calibration (float): Calibration factor for the data.
+            name (str): Name of the channel.
+            description (str): Description of the channel.
+            unit (str): Unit of measurement for the data.
+            calibration (float): Calibration factor for the data.
         """
         if name is not None:
             self.name = name
@@ -44,11 +44,11 @@ class Channel:
         Sets the raw time and data for the channel.
 
         Parameters:
-        raw_time (np.ndarray): Array of time values.
-        raw_data (np.ndarray): Array of data values.
+            raw_time (np.ndarray): Array of time values.
+            raw_data (np.ndarray): Array of data values.
 
         Raises:
-        ValueError: If raw_time and raw_data have different shapes or contain less than two elements.
+            ValueError: If raw_time and raw_data have different shapes or contain less than two elements.
         """
         if raw_time.shape != raw_data.shape:
             raise ValueError("raw_time and raw_data must have the same shape")
@@ -68,10 +68,10 @@ class Channel:
         Get the channel information and optionally print it.
 
         Parameters:
-        print_info (bool): If True, print the channel information. Default is True.
+            print_info (bool): If True, print the channel information. Default is True.
 
         Returns:
-        list: A list containing the channel information.
+            list: A list containing the channel information.
         """
         info = [
             self.name,
@@ -104,7 +104,7 @@ class Channel:
         Removes the linear trend from the raw data using scipy.signal.detrend.
 
         Parameters:
-        **kwargs**: Additional keyword arguments to pass to scipy.signal.detrend.
+            **kwargs**: Additional keyword arguments to pass to scipy.signal.detrend.
         """
         self._data = detrend(self._raw_data, **kwargs)
 
@@ -113,8 +113,8 @@ class Channel:
         Applies a low-pass Butterworth filter to the data.
 
         Parameters:
-        order (int): The order of the filter.
-        cutoff (float): The cutoff frequency of the filter.
+            order (int): The order of the filter.
+            cutoff (float): The cutoff frequency of the filter.
         """
         b, a = butter(N=order, Wn=cutoff, btype='low', fs=1/self._timestep)
         self._data = filtfilt(b, a, self._data)
@@ -125,19 +125,19 @@ class Channel:
         Trims the data based on the specified method.
 
         Parameters:
-        buffer (int): Number of points to include as buffer around the trimmed data.
-        time_shift (bool): If True, shifts the time axis to start at zero.
-        trim_method (str): Method to use for trimming ('Points', 'Threshold', 'Arias').
-        start (int): Starting index for 'Points' method.
-        end (int): Ending index for 'Points' method.
-        threshold_ratio (float): Ratio threshold for 'Threshold' method.
-        threshold_acc (float): Acceleration threshold for 'Threshold' method.
+            buffer (int): Number of points to include as buffer around the trimmed data.
+            time_shift (bool): If True, shifts the time axis to start at zero.
+            trim_method (str): Method to use for trimming ('Points', 'Threshold', 'Arias').
+            start (int): Starting index for 'Points' method.
+            end (int): Ending index for 'Points' method.
+            threshold_ratio (float): Ratio threshold for 'Threshold' method.
+            threshold_acc (float): Acceleration threshold for 'Threshold' method.
 
         Returns:
-        list: The start and end indices used for trimming.
+            list: The start and end indices used for trimming.
 
         Raises:
-        ValueError: If an unknown trim_method is specified.
+            ValueError: If an unknown trim_method is specified.
         """
         if self._points < self._raw_points:
             self.reset_raw_data()
@@ -169,8 +169,8 @@ class Channel:
         Returns the time history data.
 
         Returns:
-        np.ndarray: Array of time and scaled data values.
-        list: Maximum time and data values.
+            np.ndarray: Array of time and scaled data values.
+            list: Maximum time and data values.
         """
         t = self._time
         y = self._data / self.calibration
@@ -184,8 +184,8 @@ class Channel:
         Computes the Fourier transform of the data.
 
         Returns:
-        np.ndarray: Array of frequencies and Fourier amplitudes.
-        list: Maximum frequency and amplitude values.
+            np.ndarray: Array of frequencies and Fourier amplitudes.
+            list: Maximum frequency and amplitude values.
         """
         [t, y] = self.timehistory()[0]
         _no_freqs = int(2 ** (self._points - 1).bit_length())
@@ -201,11 +201,11 @@ class Channel:
         Computes the Power Spectral Density using Welch's method.
 
         Parameters:
-        **kwargs**: Additional keyword arguments to pass to scipy.signal.welch.
+            **kwargs**: Additional keyword arguments to pass to scipy.signal.welch.
 
         Returns:
-        np.ndarray: Array of frequencies and power spectral densities.
-        list: Maximum frequency and power spectral density values.
+            np.ndarray: Array of frequencies and power spectral densities.
+            list: Maximum frequency and power spectral density values.
         """
         f, p = welch(x=self._data, fs=1/self._timestep, **kwargs)
         index = np.argmax(f)
@@ -218,13 +218,13 @@ class Channel:
         Computes the Arias intensity.
 
         Parameters:
-        g (float): Acceleration due to gravity.
+            g (float): Acceleration due to gravity.
 
         Returns:
-        list: Time values and Arias intensity values.
-        float: Final Arias intensity value.
-        float: Duration of the significant shaking.
-        list: Start and end indices for the significant shaking period.
+            list: Time values and Arias intensity values.
+            float: Final Arias intensity value.
+            float: Duration of the significant shaking.
+            list: Start and end indices for the significant shaking period.
         """
         arias = cumulative_trapezoid(
             x=self._time,
@@ -241,14 +241,14 @@ class Channel:
         Plots the specified type of data.
 
         Parameters:
-        plot_type (str): Type of plot ('Timehistory', 'Fourier', 'Power', 'Arias').
-        name (bool): If True, includes the channel name in the ylabel.
-        description (bool): If True, includes the data description in the ylabel.
-        axis: Matplotlib axis to plot on. If None, creates a new axis.
-        **kwargs**: Additional keyword arguments for the plot.
+            plot_type (str): Type of plot ('Timehistory', 'Fourier', 'Power', 'Arias').
+            name (bool): If True, includes the channel name in the ylabel.
+            description (bool): If True, includes the data description in the ylabel.
+            axis: Matplotlib axis to plot on. If None, creates a new axis.
+            **kwargs**: Additional keyword arguments for the plot.
 
         Returns:
-        plt.Axes: The axis with the plotted data.
+            plt.Axes: The axis with the plotted data.
         """
         if axis is None:
             _, axis = plt.subplots()
