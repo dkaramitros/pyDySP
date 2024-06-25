@@ -48,7 +48,7 @@ description = "Python Dynamic Signal Processing"
 #
 # This field corresponds to the "Description" metadata field:
 # https://packaging.python.org/specifications/core-metadata/#description-optional
-readme = {file = "README.md"}
+readme = { file = "README.md", content-type = "text/markdown" }
 
 # Specify which Python versions you support. In contrast to the
 # 'Programming Language' classifiers in this file, 'pip install' will check this
