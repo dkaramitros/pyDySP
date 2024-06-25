@@ -8,7 +8,7 @@ Python classes are provided to process laboratory data from the Shaking Table ex
 
 ## Instructions
 
-The package `pydysp` includes two classes:
+The package `pyDySP` includes two classes:
 
 - The `Test` class provides methods to add, manage, and plot data from multiple channels. Transfer functions can also be produced and analyzed.
 

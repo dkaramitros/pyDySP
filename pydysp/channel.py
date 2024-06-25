@@ -25,10 +25,10 @@ class Channel:
         Sets the channel information.
 
         Parameters:
-        name (str): Name of the channel.
-        description (str): Description of the channel.
-        unit (str): Unit of measurement for the data.
-        calibration (float): Calibration factor for the data.
+        :param name (str): Name of the channel.
+        :param description (str): Description of the channel.
+        :param unit (str): Unit of measurement for the data.
+        :param calibration (float): Calibration factor for the data.
         """
         if name is not None:
             self.name = name
@@ -44,8 +44,8 @@ class Channel:
         Sets the raw time and data for the channel.
 
         Parameters:
-        raw_time (np.ndarray): Array of time values.
-        raw_data (np.ndarray): Array of data values.
+        :param raw_time (np.ndarray): Array of time values.
+        :param raw_data (np.ndarray): Array of data values.
 
         Raises:
         ValueError: If raw_time and raw_data have different shapes or contain less than two elements.
@@ -68,7 +68,7 @@ class Channel:
         Get the channel information and optionally print it.
 
         Parameters:
-        print_info (bool): If True, print the channel information. Default is True.
+        :param print_info (bool): If True, print the channel information. Default is True.
 
         Returns:
         list: A list containing the channel information.
@@ -104,7 +104,7 @@ class Channel:
         Removes the linear trend from the raw data using scipy.signal.detrend.
 
         Parameters:
-        **kwargs: Additional keyword arguments to pass to scipy.signal.detrend.
+        :param **kwargs**: Additional keyword arguments to pass to scipy.signal.detrend.
         """
         self._data = detrend(self._raw_data, **kwargs)
 
@@ -113,8 +113,8 @@ class Channel:
         Applies a low-pass Butterworth filter to the data.
 
         Parameters:
-        order (int): The order of the filter.
-        cutoff (float): The cutoff frequency of the filter.
+        :param order (int): The order of the filter.
+        :param cutoff (float): The cutoff frequency of the filter.
         """
         b, a = butter(N=order, Wn=cutoff, btype='low', fs=1/self._timestep)
         self._data = filtfilt(b, a, self._data)
@@ -125,13 +125,13 @@ class Channel:
         Trims the data based on the specified method.
 
         Parameters:
-        buffer (int): Number of points to include as buffer around the trimmed data.
-        time_shift (bool): If True, shifts the time axis to start at zero.
-        trim_method (str): Method to use for trimming ('Points', 'Threshold', 'Arias').
-        start (int): Starting index for 'Points' method.
-        end (int): Ending index for 'Points' method.
-        threshold_ratio (float): Ratio threshold for 'Threshold' method.
-        threshold_acc (float): Acceleration threshold for 'Threshold' method.
+        :param buffer (int): Number of points to include as buffer around the trimmed data.
+        :param time_shift (bool): If True, shifts the time axis to start at zero.
+        :param trim_method (str): Method to use for trimming ('Points', 'Threshold', 'Arias').
+        :param start (int): Starting index for 'Points' method.
+        :param end (int): Ending index for 'Points' method.
+        :param threshold_ratio (float): Ratio threshold for 'Threshold' method.
+        :param threshold_acc (float): Acceleration threshold for 'Threshold' method.
 
         Returns:
         list: The start and end indices used for trimming.
@@ -201,7 +201,7 @@ class Channel:
         Computes the Power Spectral Density using Welch's method.
 
         Parameters:
-        **kwargs: Additional keyword arguments to pass to scipy.signal.welch.
+        :param **kwargs**: Additional keyword arguments to pass to scipy.signal.welch.
 
         Returns:
         np.ndarray: Array of frequencies and power spectral densities.
@@ -218,7 +218,7 @@ class Channel:
         Computes the Arias intensity.
 
         Parameters:
-        g (float): Acceleration due to gravity.
+        :param g (float): Acceleration due to gravity.
 
         Returns:
         list: Time values and Arias intensity values.
@@ -241,11 +241,11 @@ class Channel:
         Plots the specified type of data.
 
         Parameters:
-        plot_type (str): Type of plot ('Timehistory', 'Fourier', 'Power', 'Arias').
-        name (bool): If True, includes the channel name in the ylabel.
-        description (bool): If True, includes the data description in the ylabel.
-        axis: Matplotlib axis to plot on. If None, creates a new axis.
-        **kwargs: Additional keyword arguments for the plot.
+        :param plot_type (str): Type of plot ('Timehistory', 'Fourier', 'Power', 'Arias').
+        :param name (bool): If True, includes the channel name in the ylabel.
+        :param description (bool): If True, includes the data description in the ylabel.
+        :param axis: Matplotlib axis to plot on. If None, creates a new axis.
+        :param **kwargs**: Additional keyword arguments for the plot.
 
         Returns:
         plt.Axes: The axis with the plotted data.
