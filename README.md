@@ -2,6 +2,9 @@
 
 Dynamic Signal Processing
 
+![Read the Docs](https://img.shields.io/readthedocs/pydysp)
+![GitHub License](https://img.shields.io/github/license/dkaramitros/python-dysp)
+
 ## Information
 
 Python classes are provided to process laboratory data from the Shaking Table experimental facilities at the University of Bristol.
