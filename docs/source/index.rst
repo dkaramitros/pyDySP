@@ -6,11 +6,13 @@
 Welcome to pyDySP's documentation!
 ==================================
 
+A python package for Dynamic Signal Processing
+
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
-   modules
+   pydysp
 
 Indices and tables
 ==================

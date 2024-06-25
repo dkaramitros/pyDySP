@@ -1,29 +1,19 @@
-pydysp package
-==============
+Available Classes
+=================
 
-Submodules
+Test Class
 ----------
 
-pydysp.channel module
----------------------
+.. automodule:: pydysp.test
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   
+Channel Class
+-------------
 
 .. automodule:: pydysp.channel
    :members:
    :undoc-members:
    :show-inheritance:
 
-pydysp.test module
-------------------
-
-.. automodule:: pydysp.test
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: pydysp
-   :members:
-   :undoc-members:
-   :show-inheritance:
