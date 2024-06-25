@@ -1,18 +1,29 @@
-Class Reference
-===============
+pydysp package
+==============
 
-Test Class
+Submodules
 ----------
+
+pydysp.channel module
+---------------------
+
+.. automodule:: pydysp.channel
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pydysp.test module
+------------------
 
 .. automodule:: pydysp.test
    :members:
    :undoc-members:
    :show-inheritance:
 
-Channel Class
--------------
+Module contents
+---------------
 
-.. automodule:: pydysp.channel
+.. automodule:: pydysp
    :members:
    :undoc-members:
    :show-inheritance:

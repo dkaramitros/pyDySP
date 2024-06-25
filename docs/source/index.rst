@@ -10,7 +10,7 @@ Welcome to pyDySP's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-   pydysp
+   modules
 
 Indices and tables
 ==================
