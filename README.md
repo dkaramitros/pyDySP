@@ -34,7 +34,7 @@ git clone https://github.com/dkaramitros/pyDySP
 
 ### Manual download
 
-You can find the source code under [releases](https://github.com/dkaramitros/pyDySP/releases), including example jupyter notebooks. You can download the code manually, extract in your working subfolder, and use it directly.
+You can also find the source code under [releases](https://github.com/dkaramitros/pyDySP/releases), including example jupyter notebooks. You can download the code manually, extract in your working subfolder, and use it directly.
 
 ## Instructions
 
@@ -44,4 +44,6 @@ The package `pyDySP` includes two classes:
 
 - The `Channel` class provides methods for signal processing, including baseline correction, filtering, and trimming. Plotting methods are also provided.
 
-Example Jupyter notebooks are also provided.
+Detailed documentation on the available class methods is available [here](https://pydysp.readthedocs.io/)
+
+To help with the use of the software, Example Jupyter notebooks are also provided [here](https://github.com/dkaramitros/pyDySP/tree/main/examples).
