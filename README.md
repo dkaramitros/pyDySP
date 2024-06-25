@@ -2,7 +2,7 @@
 
 Dynamic Signal Processing
 
-![Read the Docs](https://img.shields.io/readthedocs/pydysp)
+[![Read the Docs](https://img.shields.io/readthedocs/pydysp)](https://pydysp.readthedocs.io/en/latest/)
 ![GitHub License](https://img.shields.io/github/license/dkaramitros/python-dysp)
 
 ## Information
