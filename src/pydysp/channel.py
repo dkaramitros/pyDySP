@@ -10,8 +10,8 @@ class Channel:
         Initializes the Channel instance with default values.
         """
         self.set_channel_info(
-            name="Default channel",
-            description="This is the default channel.",
+            name="Undefined channel",
+            description="No channel description",
             unit="Undefined unit",
             calibration=1
         )

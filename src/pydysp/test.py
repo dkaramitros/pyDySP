@@ -64,11 +64,15 @@ class Test:
             calibrations (float): Calibration factor for channels.
         """
         for i, channel in enumerate(self.channel):
+            name = names[i] if names and i < len(names) else None
+            description = descriptions[i] if descriptions and i < len(descriptions) else None
+            unit = units[i] if units and i < len(units) else None
+            calibration = calibrations[i] if calibrations and i < len(calibrations) else 1
             channel.set_channel_info(
-                name=names[i],
-                description=descriptions[i],
-                unit=units[i],
-                calibration=calibrations[i]
+                name=name,
+                description=description,
+                unit=unit,
+                calibration=calibration
             )
 
     def get_test_info(self, print_info: bool = True):
@@ -88,7 +92,8 @@ class Test:
             self.filename,
             self.time,
             self.no_channels,
-            [channel.name for channel in self.channel]
+            [channel.name for channel in self.channel],
+            [channel.description for channel in self.channel]
         ]
         # Print the test information if print_info is True
         if print_info:
@@ -98,9 +103,40 @@ class Test:
             print(f"Time: {info[3]}")
             print(f"Number of Channels: {info[4]}")
             print("Channel Names:")
-            for idx, name in enumerate(info[5]):
-                print(f"  {idx}: {name}")
+            for idx in range(info[4]):
+                print(f"  {idx}: {info[5][idx]} , {info[6][idx]}")
         return info
+
+    def read_sofsi(self, filename: str) -> None:
+        """
+        Read data from a .mat file and set test information and channel data accordingly.
+
+        Parameters:
+            filename (str): Path to the .mat file.
+        
+        Raises:
+            FileNotFoundError: If the specified file does not exist.
+        """
+        try:
+            imported_data = sp.io.loadmat(filename)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"File '{filename}' not found.")
+        self.set_test_info(
+            name=filename.split("/")[-1].split(".")[0],
+            description=filename.split("/")[-1].split(".")[0],
+            filename=filename,
+            time=imported_data['File_Header'][0][0][3][0],
+            no_channels=int(imported_data['File_Header'][0][0][0][0])-1
+        )
+        for i in range(self.no_channels):
+            self.add_channel()
+            self.channel[i].set_channel_data(
+                raw_time=imported_data[f'Channel_1_Data'].flatten(),
+                raw_data=imported_data[f'Channel_{i+1}_Data'].flatten(),
+            )
+            self.channel[i].set_channel_info(
+                name=imported_data[f'Channel_{i+1}_Header'][0][0][3][0]
+            )
 
     def read_equals(self, filename: str) -> None:
         """
@@ -117,8 +153,8 @@ class Test:
         except FileNotFoundError:
             raise FileNotFoundError(f"File '{filename}' not found.")
         self.set_test_info(
-            name=filename.split("/")[-1].split(".")[0],
-            description="Project reference: " + imported_data['P_ref'][0],
+            name="Project reference: " + imported_data['P_ref'][0],
+            description=filename.split("/")[-1].split(".")[0],
             filename=imported_data['File_name'][0],
             time=imported_data['Testdate'][0] + imported_data['Time'][0],
             no_channels=imported_data['No_Channels'][0][0]
@@ -129,7 +165,7 @@ class Test:
                 raw_time=imported_data['t'].flatten(),
                 raw_data=imported_data[f'chan{i+1}'].flatten()
             )
-    
+
     def baseline_correct(self, **kwargs) -> None:
         """
         Apply baseline correction to each channel.
@@ -182,7 +218,7 @@ class Test:
         no_channels = len(channels)
         rows = -(-no_channels // columns)
         figure, axes = plt.subplots(rows, columns, sharex=True, sharey=True)
-        figure.suptitle(self.name)
+        figure.suptitle(self.description)
         figure.set_tight_layout(True)
         for i, axis in enumerate(axes.flat):
             if i < no_channels:
