@@ -200,13 +200,15 @@ class Test:
         for channel in self.channel[1:]:
             channel.trim(trim_method="Points", start=start_0, end=end_0, buffer=0, **kwargs)
 
-    def plot(self, channels: np.ndarray = None, columns: int = 1, description: bool = False, **kwargs) -> plt.Axes:
+    def plot(self, channels: np.ndarray = None, columns: int = 1,
+        name: bool = False, description: bool = True, **kwargs) -> plt.Axes:
         """
         Plot the data for specified channels.
 
         Parameters:
             channels (np.ndarray): Array of channel indices to plot.
             columns (int): Number of columns for subplots.
+            name (bool): If True, includes channel name in plot.
             description (bool): If True, includes channel description in plot.
             **kwargs**: Additional keyword arguments to pass to the plot method of each channel.
 
@@ -222,11 +224,11 @@ class Test:
         figure.set_tight_layout(True)
         for i, axis in enumerate(axes.flat):
             if i < no_channels:
-                self.channel[channels[i]].plot(axis=axis, description=description, **kwargs)
+                self.channel[channels[i]].plot(axis=axis, name=name, description=description, typey=False, **kwargs)
         return axes
     
     def transfer_function(self, channel_from: int=0, channel_to: int=1, h_method: int=1, axis=None, xlim: float=50,
-        find_peak: bool=False, find_damping: bool=False, f_min: float=0, f_max: float=50, **kwargs):
+                        find_peak: bool=False, find_damping: bool=False, f_min: float=0, f_max: float=50, **kwargs):
         """
         Compute and plot the transfer function between two channels, optionally finding the peak
         and damping within a specified frequency range.
@@ -241,72 +243,84 @@ class Test:
             find_damping (bool): Whether to find and mark the damping.
             f_min (float): Minimum frequency for the peak search range.
             f_max (float): Maximum frequency for the peak search range.
-            **kwargs**: Additional keyword arguments for signal processing functions.
+            **kwargs: Additional keyword arguments for signal processing functions.
 
         Returns:
             tuple: axis, transfer function data (frequencies and values:
-            complex, magnitude, phase in radians, phase in degrees, coherence),
-            peak frequency and value, damping ratio
+                complex, magnitude, phase in radians, phase in degrees, coherence),
+                peak frequency and value, damping ratio
         """
         # Compute transfer function
         fs = 1 / self.channel[channel_from]._timestep
         x_data = self.channel[channel_from]._data
         y_data = self.channel[channel_to]._data
+        # Set default nperseg if not provided
+        if 'nperseg' not in kwargs:
+            kwargs['nperseg'] = int(len(x_data) / 4.5)
+        # Compute power spectral densities and cross power spectral density
         f, Pxx = sp.signal.welch(x=x_data, fs=fs, **kwargs)
         _, Pyy = sp.signal.welch(x=y_data, fs=fs, **kwargs)
         _, Pxy = sp.signal.csd(x=x_data, y=y_data, fs=fs, **kwargs)
+        # Compute the transfer function
         if h_method == 1:
             t = Pxy / Pxx
         else:
             t = Pyy / Pxy
+        # Compute magnitude and phase
         t_mag = np.abs(t)
-        t_rad = np.angle(t)
-        t_rad = np.unwrap(t_rad)
-        t_deg = np.degrees(t_rad) % 360  
-        t_coh = np.abs(Pxy)**2 / (Pxx*Pyy)
-        # Create plots
+        t_rad = np.unwrap(np.angle(t))
+        t_deg = np.degrees(t_rad) % 360
+        t_coh = np.abs(Pxy) ** 2 / (Pxx * Pyy)
+        # Create plots if axis is not an empty list
         if axis is None:
             default_figsize = plt.rcParams["figure.figsize"]
             default_width = default_figsize[0]
             default_height = default_figsize[1]
-            fig, ax = plt.subplots(3, 1, figsize=(default_width, 3*default_height))
-            axis = ax
+            fig, axis = plt.subplots(3, 1, figsize=(default_width, 3 * default_height))
         elif not isinstance(axis, list):
             axis = [axis]
-        for ax in axis:
-            ax.set_xlim(0, xlim)
-            ax.grid()
-        # Plot transfer function magnitude
-        axis[0].plot(f, t_mag, label=self.name)
-        axis[0].set_xlabel("Frequency (Hz)")
-        axis[0].set_ylabel(f"Transfer Function {self.channel[channel_to].name}/{self.channel[channel_from].name}")
+        if len(axis) > 0:
+            # Plot transfer function magnitude
+            axis[0].plot(f, t_mag, label=self.description)
+            axis[0].set_xlim(0, xlim)
+            axis[0].set_xlabel("Frequency (Hz)")
+            axis[0].set_ylabel(f"Transfer Function {self.channel[channel_to].name}/{self.channel[channel_from].name}")
+            axis[0].grid()
         if len(axis) > 1:
-            axis[1].plot(f, t_deg, label=self.name)
+            # Plot phase if second axis is provided
+            axis[1].plot(f, t_deg, label=self.description)
+            axis[1].set_xlim(0, xlim)
             axis[1].set_xlabel("Frequency (Hz)")
             axis[1].set_ylabel("Phase (degrees)")
-        # Plot coherence if third axis is provided
+            axis[1].grid()
         if len(axis) > 2:
-            axis[2].plot(f, t_coh, label=self.name)
+            # Plot coherence if third axis is provided
+            axis[2].plot(f, t_coh, label=self.description)
+            axis[2].set_xlim(0, xlim)
             axis[2].set_xlabel("Frequency (Hz)")
             axis[2].set_ylabel("Coherence")
-        # Find peak within the specified range
+            axis[2].grid()
+        # Initialize variables for peak and damping
         f_n, t_n, ksi = None, None, None
+        # Find peak within the specified range
         if find_peak or find_damping:
             valid_indices = (f >= f_min) & (f <= f_max)
             if np.any(valid_indices):
                 peak_index = np.argmax(t_mag[valid_indices])
                 peak_index = np.where(valid_indices)[0][peak_index]
                 f_n, t_n = f[peak_index], t_mag[peak_index]
-                axis[0].plot(f_n, t_n, "o", color=axis[0].lines[-1].get_color())
+                if axis is not None:
+                    axis[0].plot(f_n, t_n, "o", color=axis[0].lines[-1].get_color())
         # Compute damping (half-bandwidth method)
         if find_damping and f_n is not None:
             try:
                 t_hb = max(t_n / np.sqrt(2), t_mag[0])
                 eqn = sp.interpolate.interp1d(f, t_mag - t_hb)
                 f_1 = sp.optimize.root_scalar(eqn, bracket=[0, f_n], method='bisect').root
-                f_2 = sp.optimize.root_scalar(eqn, bracket=[f_n, 2*f_n], method='bisect').root
+                f_2 = sp.optimize.root_scalar(eqn, bracket=[f_n, 2 * f_n], method='bisect').root
                 ksi = (f_2 - f_1) / (2 * f_n)
-                axis[0].plot([f_1, f_2], [t_hb, t_hb], "--", color=axis[0].lines[-1].get_color())
+                if axis is not None:
+                    axis[0].plot([f_1, f_2], [t_hb, t_hb], "--", color=axis[0].lines[-1].get_color())
             except ValueError:
                 ksi = None
         return axis, [f, t, t_mag, t_rad, t_deg, t_coh], [f_n, t_n], ksi

@@ -191,7 +191,7 @@ class Channel:
         _no_freqs = int(2 ** (self._points - 1).bit_length())
         f = np.fft.rfftfreq(n=_no_freqs, d=self._timestep)
         s = np.abs(np.fft.rfft(a=y, n=_no_freqs))
-        index = np.argmax(f)
+        index = np.argmax(s)
         f_n = f[index]
         s_max = s[index]
         return np.array([f, s]), [f_n, s_max]
@@ -207,8 +207,10 @@ class Channel:
             np.ndarray: Array of frequencies and power spectral densities.
             list: Maximum frequency and power spectral density values.
         """
+        if 'nperseg' not in kwargs:
+            kwargs['nperseg'] = int(len(self._data)/4.5)
         f, p = welch(x=self._data, fs=1/self._timestep, **kwargs)
-        index = np.argmax(f)
+        index = np.argmax(p)
         f_n = f[index]
         p_max = p[index]
         return np.array([f, p]), [f_n, p_max]
@@ -236,14 +238,16 @@ class Channel:
         duration = self._time[end] - self._time[start]
         return [self._time, arias], arias[-1], duration, [start, end]
 
-    def plot(self, plot_type: str = "Timehistory", name: bool = True, description: bool = True, axis=None, **kwargs) -> plt.Axes:
+    def plot(self, plot_type: str = "Timehistory", name: bool = True, description: bool = False,
+        typey: bool = True, axis=None, **kwargs) -> plt.Axes:
         """
         Plots the specified type of data.
 
         Parameters:
             plot_type (str): Type of plot ('Timehistory', 'Fourier', 'Power', 'Arias').
             name (bool): If True, includes the channel name in the ylabel.
-            description (bool): If True, includes the data description in the ylabel.
+            description (bool): If True, includes the channel description in the ylabel.
+            typey (bool): If True, includes the plot type in the ylabel.
             axis: Matplotlib axis to plot on. If None, creates a new axis.
             **kwargs**: Additional keyword arguments for the plot.
 
@@ -257,21 +261,21 @@ class Channel:
             case "Timehistory":
                 [x, y] = self.timehistory()[0]
                 xlabel = "Time (sec)"
-                ydesc = "Timehistory (" + self.unit + ")"
+                ytype = "Timehistory (" + self.unit + ")"
             case "Fourier":
                 [x, y] = self.fourier()[0]
                 xlabel = "Frequency (Hz)"
-                ydesc = "Fourier Amplitude"
+                ytype = "Fourier Amplitude"
                 freq_plot = True
             case "Power":
                 [x, y] = self.welch(**kwargs)[0]
                 xlabel = "Frequency (Hz)"
-                ydesc = "Power Spectral Density"
+                ytype = "Power Spectral Density"
                 freq_plot = True
             case "Arias":
                 [x, y] = self.arias()[0]
                 xlabel = "Time (sec)"
-                ydesc = "Arias Intensity (m/s)"
+                ytype = "Arias Intensity (m/s)"
             case _:
                 raise ValueError(f"Unknown plot_type: {plot_type}")
         if freq_plot:
@@ -281,7 +285,9 @@ class Channel:
         if name:
             ylabel += self.name
         if description:
-            ylabel += " " + ydesc
+            ylabel += " " + self.description
+        if typey:
+            ylabel += " " + ytype
         axis.set_xlabel(xlabel)
         axis.set_ylabel(ylabel)
         axis.grid()
