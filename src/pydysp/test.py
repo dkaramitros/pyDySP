@@ -225,9 +225,8 @@ class Test:
             t = Pyy / Pxy
         t_mag = np.abs(t)
         t_rad = np.angle(t)
-        t_rad = (t_rad + 2*np.pi) % (2*np.pi)
-        t_deg = (t_rad * 180 / np.pi) % 360
-        t_deg = t_rad * 180 / np.pi
+        t_rad = np.unwrap(t_rad)
+        t_deg = np.degrees(t_rad) % 360  
         t_coh = np.abs(Pxy)**2 / (Pxx*Pyy)
         # Create plots
         if axis is None:
