@@ -109,4 +109,6 @@ twine upload --repository testpypi dist/*
 
 # For pypi:
 twine upload dist/*
+# For updates:
+twine upload --skip-existing dist/*
 ```
