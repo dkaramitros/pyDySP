@@ -97,7 +97,7 @@ You can build using:
 python -m build
 ```
 
-To upload the documentation you need to install `twine`:
+To upload the package you need to install `twine`:
 ```
 pip install twine
 ```
