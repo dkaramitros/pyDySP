@@ -238,6 +238,16 @@ class Channel:
         duration = self._time[end] - self._time[start]
         return [self._time, arias], arias[-1], duration, [start, end]
 
+    def rms(self) -> float:
+        """
+        Computes the Root Mean Square (RMS) of the data.
+
+        Returns:
+            float: RMS value.
+        """
+        y = self._data / self.calibration
+        return np.sqrt(np.mean(y ** 2))
+
     def plot(self, plot_type: str = "Timehistory", name: bool = True, description: bool = False,
         typey: bool = True, axis=None, **kwargs) -> plt.Axes:
         """
