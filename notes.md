@@ -79,9 +79,9 @@ You can then edit the `.rst` files and compile the docs using:
 make html
 ```
 
-You can go to [readthedocs](https://readthedocs.org/) to create or log in to your account, to import the project and documentation from github. To build, you might need to add a `requirements.txt` file in the `docs` folder, including the sphinx theme and any imported modules used in the documentation.
+You can go to [readthedocs](https://readthedocs.org/) to create or log in to your account, to import the project and documentation from _github_. To build, you might need to add a `requirements.txt` file in the `docs` folder, including the sphinx theme and any imported modules used in the documentation.
 
-Once connected, _readthedocs_ should update automatically.
+Once connected with _github_, _readthedocs_ should update automatically.
 
 ## Publishing
 
