@@ -53,6 +53,44 @@ class Test:
         if self.no_channels < len(self.channel):
             self.no_channels = len(self.channel)
 
+    def add_combined_channel(self, channel1: int, channel2: int, operation: str = 'sum', coefficient: float = 0.5, channel_index: int = None) -> None:
+        """
+        Add a new channel or modify an existing channel that is a combination of two existing channels.
+
+        Parameters:
+            channel1 (int): Index of the first channel to combine.
+            channel2 (int): Index of the second channel to combine.
+            operation (str): 'sum' for addition or 'diff' for subtraction. Default is 'sum'.
+            coefficient (float): Multiplication factor for the combined result. Default is 0.5.
+            channel_index (int): Index of the channel to modify. If None, a new channel is created. Default is None.
+        """
+        if channel1 >= self.no_channels or channel2 >= self.no_channels:
+            raise ValueError("Channel index out of range.")
+        if operation not in ['sum', 'diff']:
+            raise ValueError("Operation must be either 'sum' or 'diff'.")
+        if channel_index is None:
+            self.add_channel()
+            target_channel = self.channel[-1]
+        else:
+            if channel_index < 0:
+                channel_index = len(self.channel) + channel_index
+            if channel_index >= self.no_channels:
+                raise ValueError("Target channel index out of range.")
+            target_channel = self.channel[channel_index]
+        data1 = self.channel[channel1].get_data()[1]
+        data2 = self.channel[channel2].get_data()[1]
+        new_data = coefficient * (data1 + data2 if operation == 'sum' else data1 - data2)        
+        target_channel.set_channel_data(
+            raw_time=self.channel[channel1].get_raw_data()[0],
+            raw_data=new_data
+        )
+        target_channel.set_channel_info(
+            name=f"{coefficient} * (Ch_{channel1} {'+' if operation == 'sum' else '-'} Ch_{channel2})",
+            description=f"{operation.capitalize()}: {self.channel[channel1].description} , {self.channel[channel2].description}",
+            unit=self.channel[channel1].unit,
+            calibration=self.channel[channel1].calibration
+        )
+
     def set_channel_info(self, names: str = None, descriptions: str = None, units: str = None, calibrations: float = 1) -> None:
         """
         Set information for each channel.
@@ -75,6 +113,8 @@ class Test:
                 calibration=calibration
             )
 
+        self.no_channels = len(self.channel)
+
     def get_test_info(self, print_info: bool = True):
         """
         Get the test information and optionally print it.
@@ -93,7 +133,9 @@ class Test:
             self.time,
             self.no_channels,
             [channel.name for channel in self.channel],
-            [channel.description for channel in self.channel]
+            [channel.description for channel in self.channel],
+            [channel.unit for channel in self.channel],
+            [channel.calibration for channel in self.channel]
         ]
         # Print the test information if print_info is True
         if print_info:
@@ -104,7 +146,7 @@ class Test:
             print(f"Number of Channels: {info[4]}")
             print("Channel Names:")
             for idx in range(info[4]):
-                print(f"  {idx}: {info[5][idx]} , {info[6][idx]}")
+                print(f"  {idx}: {info[5][idx]} , {info[6][idx]} , {info[7][idx]} , {info[8][idx]}")
         return info
 
     def read_sofsi(self, filename: str) -> None:
@@ -166,26 +208,45 @@ class Test:
                 raw_data=imported_data[f'chan{i+1}'].flatten()
             )
 
-    def baseline_correct(self, **kwargs) -> None:
+    def baseline_correct(self, channels: list = None, **kwargs) -> None:
         """
-        Apply baseline correction to each channel.
+        Apply baseline correction to specified channels.
 
         Parameters:
+            channels (list): List of channel indices to apply baseline correction. If None, applies to all channels.
             **kwargs**: Additional keyword arguments to pass to the baseline method of each channel.
         """
-        for channel in self.channel:
-            channel.baseline_correct(**kwargs)
+        if channels is None:
+            channels = range(len(self.channel))
+        for i in channels:
+            self.channel[i].baseline_correct(**kwargs)
 
-    def filter(self, **kwargs) -> None:
+    def drift_correct(self, channels: list = None, **kwargs) -> None:
         """
-        Apply a low-pass Butterworth filter to each channel.
+        Apply drift correction to specified channels.
 
         Parameters:
-            **kwargs**: Additional keyword arguments to pass to the filter method of each channel.
+            channels (list): List of channel indices to apply drift correction. If None, applies to all channels.
+            **kwargs**: Additional keyword arguments to pass to the drift method of each channel.
         """
-        for channel in self.channel:
-            channel.filter(**kwargs)
-    
+        if channels is None:
+            channels = range(len(self.channel))
+        for i in channels:
+            self.channel[i].drift_correct(**kwargs)
+
+    def filter(self, channels: list = None, **kwargs) -> None:
+        """
+        Apply a low-pass Butterworth filter to specified channels.
+
+        Parameters:
+            channels (list): List of channel indices to filter. If None, filter all channels.
+            **kwargs: Additional keyword arguments to pass to the filter method of each channel.
+        """
+        if channels is None:
+            channels = range(len(self.channel))     
+        for i in channels:
+            self.channel[i].filter(**kwargs)
+
     def trim(self, **kwargs) -> None:
         """
         Trim the data for each channel.
@@ -222,8 +283,8 @@ class Test:
         figure, axes = plt.subplots(rows, columns, sharex=True, sharey=True)
         figure.suptitle(self.description)
         figure.set_tight_layout(True)
-        for i, axis in enumerate(axes.flat):
-            if i < no_channels:
+        for i, axis in enumerate(axes.T.flat):
+            if i < no_channels and channels[i] < self.no_channels:
                 self.channel[channels[i]].plot(axis=axis, name=name, description=description, typey=False, **kwargs)
         return axes
     

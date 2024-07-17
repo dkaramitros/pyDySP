@@ -89,7 +89,25 @@ class Channel:
             print(f"Timestep: {info[4]}")
             print(f"Points: {info[5]}")
         return info
-        
+
+    def get_raw_data(self) -> tuple:
+        """
+        Returns the raw data of the channel.
+
+        Returns:
+            tuple: A tuple containing raw time, raw data, raw points, and raw timestep.
+        """
+        return self._raw_time, self._raw_data, self._raw_points, self._raw_timestep
+
+    def get_data(self) -> tuple:
+        """
+        Returns the current (possibly processed) data of the channel.
+
+        Returns:
+            tuple: A tuple containing current time, data, points, and timestep.
+        """
+        return self._time, self._data, self._points, self._timestep
+
     def reset_raw_data(self) -> None:
         """
         Resets the processed data to the raw data.
@@ -98,6 +116,16 @@ class Channel:
         self._data = self._raw_data
         self._points = self._raw_points
         self._timestep = self._raw_timestep
+
+    def drift_correct(self, points: int=50) -> None:
+        """
+        Removes drift from the raw data using the average of the first few points.
+
+        Parameters:
+            points (int): Number of points to average.
+        """
+        drift = np.mean(self._raw_data[:points])
+        self._data = self._raw_data - drift
 
     def baseline_correct(self, **kwargs) -> None:
         """
