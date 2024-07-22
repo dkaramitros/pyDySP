@@ -168,7 +168,7 @@ class Test:
             description=filename.split("/")[-1].split(".")[0],
             filename=filename,
             time=imported_data['File_Header'][0][0][3][0],
-            no_channels=int(imported_data['File_Header'][0][0][0][0])-1
+            no_channels=int(imported_data['File_Header'][0][0][0][0])
         )
         for i in range(self.no_channels):
             self.add_channel()
