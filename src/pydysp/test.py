@@ -2,6 +2,7 @@ import csv
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy as sp
+import os
 from scipy.signal import csd, welch
 from scipy.integrate import cumulative_trapezoid
 from scipy.optimize import root_scalar
@@ -386,32 +387,51 @@ class Test:
                 ksi = None
         return axis, [f, t, t_mag, t_rad, t_deg, t_coh], [f_n, t_n], ksi
 
-    def export_to_csv(self, filename: str) -> None:
+    def export_to_csv(self, filename: str, channels: list = None,
+        name: bool = False, description: bool = True) -> None:
         """
         Export the data from all channels to a CSV file.
 
         Parameters:
             filename (str): Path to the output CSV file.
+            channels (list, optional): List of channel indices to export. Exports all if None.
+            name (bool): If True, includes channel name in the title.
+            description (bool): If True, includes channel description in the title.
 
         Raises:
-            ValueError: If there are no channels to export.
+            ValueError: If there are no valid channels to export.
         """
         if self.no_channels == 0:
             raise ValueError("No channels available to export.")
+        if channels is None:
+            selected_channels = self.channel
+        else:
+            if not all(isinstance(i, int) and 0 < i < self.no_channels for i in channels):
+                raise ValueError("Invalid channel indices provided.")
+            selected_channels = [self.channel[i] for i in channels]
+        if not selected_channels:
+            raise ValueError("No valid channels selected for export.")
         # Prepare header
         headers = ["Time"]
-        for ch in self.channel:
-            headers.append(ch.name)
+        for ch in selected_channels:
+            label_parts = []
+            if name:
+                label_parts.append(ch.name.replace(" ", "_"))
+            if description:
+                label_parts.append(ch.description.replace(" ", "_"))
+            label = "_".join(label_parts) if label_parts else ch.name.replace(" ", "_")
+            headers.append(label)
         # Prepare data matrix
-        max_points = max(len(ch._data) for ch in self.channel)
-        data_matrix = np.empty((max_points, self.no_channels + 1))
+        max_points = max(len(ch._data) for ch in selected_channels)
+        data_matrix = np.empty((max_points, len(selected_channels) + 1))
         data_matrix[:] = np.nan
         # Fill time data
         data_matrix[:, 0] = self.channel[0]._time
         # Fill channel data
-        for i, ch in enumerate(self.channel):
+        for i, ch in enumerate(selected_channels):
             data_matrix[:len(ch._data), i + 1] = ch._data
         # Write to CSV
+        os.makedirs(os.path.dirname(filename), exist_ok=True)  # Ensure the directory exists
         with open(filename, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(headers)
