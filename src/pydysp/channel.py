@@ -1,10 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from typing import Literal
 from scipy.signal import detrend, butter, filtfilt, welch
 from scipy.integrate import cumulative_trapezoid
 
+
 class Channel:
-    
+
     def __init__(self):
         """
         Initializes the Channel instance with default values.
@@ -13,14 +15,18 @@ class Channel:
             name="Undefined channel",
             description="No channel description",
             unit="Undefined unit",
-            calibration=1
+            calibration=1,
         )
-        self.set_channel_data(
-            raw_time=np.zeros(2),
-            raw_data=np.zeros(2)
-        )
-    
-    def set_channel_info(self, name: str = None, description: str = None, unit: str = None, calibration: float = None) -> None:
+        self.set_channel_data(raw_time=np.zeros(2), raw_data=np.zeros(2))
+
+    def set_channel_info(
+        self,
+        name: str = None,
+        description: str = None,
+        unit: str = None,
+        calibration: float = None,
+        factor_type: Literal["V_u", "u_V"] = "u_V",
+    ) -> None:
         """
         Sets the channel information.
 
@@ -29,6 +35,7 @@ class Channel:
             description (str): Description of the channel.
             unit (str): Unit of measurement for the data.
             calibration (float): Calibration factor for the data.
+            factor_type (Literal["V_u","u_V"]): Volts per unit or units per Volt.
         """
         if name is not None:
             self.name = name
@@ -37,7 +44,10 @@ class Channel:
         if unit is not None:
             self.unit = unit
         if calibration is not None:
-            self.calibration = calibration
+            if factor_type == "V_u" and calibration != 0:
+                self.calibration = 1 / calibration
+            else:
+                self.calibration = calibration
 
     def set_channel_data(self, raw_time: np.ndarray, raw_data: np.ndarray) -> None:
         """
@@ -79,7 +89,7 @@ class Channel:
             self.unit,
             self.calibration,
             self._timestep,
-            self._points
+            self._points,
         ]
         if print_info:
             print(f"Name: {info[0]}")
@@ -117,7 +127,7 @@ class Channel:
         self._points = self._raw_points
         self._timestep = self._raw_timestep
 
-    def drift_correct(self, points: int=50) -> None:
+    def drift_correct(self, points: int = 50) -> None:
         """
         Removes drift from the raw data using the average of the first few points.
 
@@ -144,11 +154,19 @@ class Channel:
             order (int): The order of the filter.
             cutoff (float): The cutoff frequency of the filter.
         """
-        b, a = butter(N=order, Wn=cutoff, btype='low', fs=1/self._timestep)
+        b, a = butter(N=order, Wn=cutoff, btype="low", fs=1 / self._timestep)
         self._data = filtfilt(b, a, self._data)
 
-    def trim(self, buffer: int = 100, time_shift: bool = True, trim_method: str = "Threshold",
-             start: int = 0, end: int = 0, threshold_ratio: float = 0.05, threshold_acc: float = 0.01) -> list[int]:
+    def trim(
+        self,
+        buffer: int = 100,
+        time_shift: bool = True,
+        trim_method: str = "Threshold",
+        start: int = 0,
+        end: int = 0,
+        threshold_ratio: float = 0.05,
+        threshold_acc: float = 0.01,
+    ) -> list[int]:
         """
         Trims the data based on the specified method.
 
@@ -173,12 +191,16 @@ class Channel:
             case "Points":
                 pass
             case "Threshold":
-                threshold = min([
-                    threshold_ratio * np.amax(np.abs(self._data)),
-                    threshold_acc / self.calibration
-                ])
+                threshold = min(
+                    [
+                        threshold_ratio * np.amax(np.abs(self._data)),
+                        threshold_acc * self.calibration,
+                    ]
+                )
                 start = np.argmax(np.abs(self._data) > threshold)
-                end = np.size(self._data) - np.argmax(np.abs(np.flip(self._data)) > threshold)
+                end = np.size(self._data) - np.argmax(
+                    np.abs(np.flip(self._data)) > threshold
+                )
             case "Arias":
                 [start, end] = self.arias()[3]
             case _:
@@ -201,12 +223,12 @@ class Channel:
             list: Maximum time and data values.
         """
         t = self._time
-        y = self._data / self.calibration
+        y = self._data * self.calibration
         index = np.argmax(np.abs(y))
         t_max = t[index]
         y_max = y[index]
         return np.array([t, y]), [t_max, y_max]
-    
+
     def fourier(self) -> tuple[np.ndarray, list[float]]:
         """
         Computes the Fourier transform of the data.
@@ -235,15 +257,17 @@ class Channel:
             np.ndarray: Array of frequencies and power spectral densities.
             list: Maximum frequency and power spectral density values.
         """
-        if 'nperseg' not in kwargs:
-            kwargs['nperseg'] = int(len(self._data)/4.5)
-        f, p = welch(x=self._data, fs=1/self._timestep, **kwargs)
+        if "nperseg" not in kwargs:
+            kwargs["nperseg"] = int(len(self._data) / 4.5)
+        f, p = welch(x=self._data, fs=1 / self._timestep, **kwargs)
         index = np.argmax(p)
         f_n = f[index]
         p_max = p[index]
         return np.array([f, p]), [f_n, p_max]
 
-    def arias(self, g: float = 9.81) -> tuple[list[np.ndarray, np.ndarray], float, float, list[int]]:
+    def arias(
+        self, g: float = 9.81
+    ) -> tuple[list[np.ndarray, np.ndarray], float, float, list[int]]:
         """
         Computes the Arias intensity.
 
@@ -257,10 +281,9 @@ class Channel:
             list: Start and end indices for the significant shaking period.
         """
         arias = cumulative_trapezoid(
-            x=self._time,
-            y=np.pi / 2 / 9.81 * (g * self._data / self.calibration) ** 2
+            x=self._time, y=np.pi / 2 / 9.81 * (g * self._data * self.calibration) ** 2
         )
-        arias = np.append(arias,arias[-1])
+        arias = np.append(arias, arias[-1])
         start = np.argmax(arias > 0.05 * arias[-1])
         end = np.argmax(arias > 0.95 * arias[-1])
         duration = self._time[end] - self._time[start]
@@ -273,11 +296,18 @@ class Channel:
         Returns:
             float: RMS value.
         """
-        y = self._data / self.calibration
-        return np.sqrt(np.mean(y ** 2))
+        y = self._data * self.calibration
+        return np.sqrt(np.mean(y**2))
 
-    def plot(self, plot_type: str = "Timehistory", name: bool = True, description: bool = False,
-        typey: bool = True, axis=None, **kwargs) -> plt.Axes:
+    def plot(
+        self,
+        plot_type: str = "Timehistory",
+        name: bool = True,
+        description: bool = False,
+        typey: bool = True,
+        axis=None,
+        **kwargs,
+    ) -> plt.Axes:
         """
         Plots the specified type of data.
 

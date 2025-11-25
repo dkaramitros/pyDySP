@@ -3,14 +3,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy as sp
 import os
+from typing import Literal
 from scipy.signal import csd, welch
 from scipy.integrate import cumulative_trapezoid
 from scipy.optimize import root_scalar
 from scipy import interpolate, optimize
 from . import channel
 
+
 class Test:
-    
+
     def __init__(self):
         """
         Initialize Test instance with default values.
@@ -20,11 +22,18 @@ class Test:
             description="This is the default test.",
             filename="N/A",
             time="N/A",
-            no_channels=0
+            no_channels=0,
         )
         self.channel = []
 
-    def set_test_info(self, name: str = None, description: str = None, filename: str = None, time: str = None, no_channels: int = None) -> None:
+    def set_test_info(
+        self,
+        name: str = None,
+        description: str = None,
+        filename: str = None,
+        time: str = None,
+        no_channels: int = None,
+    ) -> None:
         """
         Set test information.
 
@@ -54,7 +63,14 @@ class Test:
         if self.no_channels < len(self.channel):
             self.no_channels = len(self.channel)
 
-    def add_combined_channel(self, channel1: int, channel2: int, operation: str = 'sum', coefficient: float = 0.5, channel_index: int = None) -> None:
+    def add_combined_channel(
+        self,
+        channel1: int,
+        channel2: int,
+        operation: str = "sum",
+        coefficient: float = 0.5,
+        channel_index: int = None,
+    ) -> None:
         """
         Add a new channel or modify an existing channel that is a combination of two existing channels.
 
@@ -67,7 +83,7 @@ class Test:
         """
         if channel1 >= self.no_channels or channel2 >= self.no_channels:
             raise ValueError("Channel index out of range.")
-        if operation not in ['sum', 'diff']:
+        if operation not in ["sum", "diff"]:
             raise ValueError("Operation must be either 'sum' or 'diff'.")
         if channel_index is None:
             self.add_channel()
@@ -80,19 +96,27 @@ class Test:
             target_channel = self.channel[channel_index]
         data1 = self.channel[channel1].get_data()[1]
         data2 = self.channel[channel2].get_data()[1]
-        new_data = coefficient * (data1 + data2 if operation == 'sum' else data1 - data2)        
+        new_data = coefficient * (
+            data1 + data2 if operation == "sum" else data1 - data2
+        )
         target_channel.set_channel_data(
-            raw_time=self.channel[channel1].get_raw_data()[0],
-            raw_data=new_data
+            raw_time=self.channel[channel1].get_raw_data()[0], raw_data=new_data
         )
         target_channel.set_channel_info(
             name=f"{coefficient} * (Ch_{channel1} {'+' if operation == 'sum' else '-'} Ch_{channel2})",
             description=f"{operation.capitalize()}: {self.channel[channel1].description} , {self.channel[channel2].description}",
             unit=self.channel[channel1].unit,
-            calibration=self.channel[channel1].calibration
+            calibration=self.channel[channel1].calibration,
         )
 
-    def set_channel_info(self, names: str = None, descriptions: str = None, units: str = None, calibrations: float = 1) -> None:
+    def set_channel_info(
+        self,
+        names: str = None,
+        descriptions: str = None,
+        units: str = None,
+        calibrations: float = 1,
+        factor_types: Literal["V_u", "u_V"] = "u_V",
+    ) -> None:
         """
         Set information for each channel.
 
@@ -101,17 +125,26 @@ class Test:
             descriptions (str): List of descriptions for channels.
             units (str): List of units for channels.
             calibrations (float): Calibration factor for channels.
+            factor_type (Literal["V_u","u_V"]): Volts per unit or units per Volt.
         """
         for i, channel in enumerate(self.channel):
             name = names[i] if names and i < len(names) else None
-            description = descriptions[i] if descriptions and i < len(descriptions) else None
+            description = (
+                descriptions[i] if descriptions and i < len(descriptions) else None
+            )
             unit = units[i] if units and i < len(units) else None
-            calibration = calibrations[i] if calibrations and i < len(calibrations) else 1
+            calibration = (
+                calibrations[i] if calibrations and i < len(calibrations) else 1
+            )
+            factor_type = (
+                factor_types[i] if factor_types and i < len(factor_types) else "u_V"
+            )
             channel.set_channel_info(
                 name=name,
                 description=description,
                 unit=unit,
-                calibration=calibration
+                calibration=calibration,
+                factor_type=factor_type,
             )
 
         self.no_channels = len(self.channel)
@@ -136,7 +169,7 @@ class Test:
             [channel.name for channel in self.channel],
             [channel.description for channel in self.channel],
             [channel.unit for channel in self.channel],
-            [channel.calibration for channel in self.channel]
+            [channel.calibration for channel in self.channel],
         ]
         # Print the test information if print_info is True
         if print_info:
@@ -147,7 +180,9 @@ class Test:
             print(f"Number of Channels: {info[4]}")
             print("Channel Names:")
             for idx in range(info[4]):
-                print(f"  {idx}: {info[5][idx]} , {info[6][idx]} , {info[7][idx]} , {info[8][idx]}")
+                print(
+                    f"  {idx}: {info[5][idx]} , {info[6][idx]} , {info[7][idx]} , {info[8][idx]}"
+                )
         return info
 
     def read_sofsi(self, filename: str) -> None:
@@ -156,7 +191,7 @@ class Test:
 
         Parameters:
             filename (str): Path to the .mat file.
-        
+
         Raises:
             FileNotFoundError: If the specified file does not exist.
         """
@@ -168,17 +203,17 @@ class Test:
             name=filename.split("/")[-1].split(".")[0],
             description=filename.split("/")[-1].split(".")[0],
             filename=filename,
-            time=imported_data['File_Header'][0][0][3][0],
-            no_channels=int(imported_data['File_Header'][0][0][0][0])
+            time=imported_data["File_Header"][0][0][3][0],
+            no_channels=int(imported_data["File_Header"][0][0][0][0]),
         )
         for i in range(self.no_channels):
             self.add_channel()
             self.channel[i].set_channel_data(
-                raw_time=imported_data[f'Channel_1_Data'].flatten(),
-                raw_data=imported_data[f'Channel_{i+1}_Data'].flatten(),
+                raw_time=imported_data[f"Channel_1_Data"].flatten(),
+                raw_data=imported_data[f"Channel_{i+1}_Data"].flatten(),
             )
             self.channel[i].set_channel_info(
-                name=imported_data[f'Channel_{i+1}_Header'][0][0][3][0]
+                name=imported_data[f"Channel_{i+1}_Header"][0][0][3][0]
             )
 
     def read_equals(self, filename: str) -> None:
@@ -187,7 +222,7 @@ class Test:
 
         Parameters:
             filename (str): Path to the .mat file.
-        
+
         Raises:
             FileNotFoundError: If the specified file does not exist.
         """
@@ -196,17 +231,17 @@ class Test:
         except FileNotFoundError:
             raise FileNotFoundError(f"File '{filename}' not found.")
         self.set_test_info(
-            name="Project reference: " + imported_data['P_ref'][0],
+            name="Project reference: " + imported_data["P_ref"][0],
             description=filename.split("/")[-1].split(".")[0],
-            filename=imported_data['File_name'][0],
-            time=imported_data['Testdate'][0] + imported_data['Time'][0],
-            no_channels=imported_data['No_Channels'][0][0]
+            filename=imported_data["File_name"][0],
+            time=imported_data["Testdate"][0] + imported_data["Time"][0],
+            no_channels=imported_data["No_Channels"][0][0],
         )
         for i in range(self.no_channels):
             self.add_channel()
             self.channel[i].set_channel_data(
-                raw_time=imported_data['t'].flatten(),
-                raw_data=imported_data[f'chan{i+1}'].flatten()
+                raw_time=imported_data["t"].flatten(),
+                raw_data=imported_data[f"chan{i+1}"].flatten(),
             )
 
     def baseline_correct(self, channels: list = None, **kwargs) -> None:
@@ -244,7 +279,7 @@ class Test:
             **kwargs: Additional keyword arguments to pass to the filter method of each channel.
         """
         if channels is None:
-            channels = range(len(self.channel))     
+            channels = range(len(self.channel))
         for i in channels:
             self.channel[i].filter(**kwargs)
 
@@ -255,15 +290,25 @@ class Test:
         Parameters:
             **kwargs**: Additional keyword arguments to pass to the trim method of each channel.
         """
-        [start_0,end_0] = self.channel[0].trim(**kwargs)
+        [start_0, end_0] = self.channel[0].trim(**kwargs)
         for kwarg in ["trim_method", "start", "end"]:
             if kwarg in kwargs:
                 del kwargs[kwarg]
         for channel in self.channel[1:]:
-            channel.trim(trim_method="Points", start=start_0, end=end_0, buffer=0, **kwargs)
+            channel.trim(
+                trim_method="Points", start=start_0, end=end_0, buffer=0, **kwargs
+            )
 
-    def plot(self, channels: np.ndarray = None, columns: int = 1,
-        name: bool = False, description: bool = True, **kwargs) -> plt.Axes:
+    def plot(
+        self,
+        channels: np.ndarray = None,
+        columns: int = 1,
+        name: bool = False,
+        description: bool = True,
+        sharex: bool = True,
+        sharey: bool = True,
+        **kwargs,
+    ) -> plt.Axes:
         """
         Plot the data for specified channels.
 
@@ -281,16 +326,34 @@ class Test:
             channels = np.arange(self.no_channels)
         no_channels = len(channels)
         rows = -(-no_channels // columns)
-        figure, axes = plt.subplots(rows, columns, sharex=True, sharey=True)
+        figure, axes = plt.subplots(rows, columns, sharex=sharex, sharey=sharey)
         figure.suptitle(self.description)
         figure.set_tight_layout(True)
         for i, axis in enumerate(axes.T.flat):
-            if i < no_channels and channels[i] < self.no_channels:
-                self.channel[channels[i]].plot(axis=axis, name=name, description=description, typey=False, **kwargs)
+            if i >= no_channels:
+                break
+            ch_idx = channels[i]
+            if ch_idx is None:
+                continue
+            if ch_idx < self.no_channels:
+                self.channel[ch_idx].plot(
+                    axis=axis, name=name, description=description, typey=False, **kwargs
+                )
         return axes
-    
-    def transfer_function(self, channel_from: int=0, channel_to: int=1, h_method: int=1, axis=None, xlim: float=50,
-                        find_peak: bool=False, find_damping: bool=False, f_min: float=0, f_max: float=50, **kwargs):
+
+    def transfer_function(
+        self,
+        channel_from: int = 0,
+        channel_to: int = 1,
+        h_method: int = 1,
+        axis=None,
+        xlim: float = 50,
+        find_peak: bool = False,
+        find_damping: bool = False,
+        f_min: float = 0,
+        f_max: float = 50,
+        **kwargs,
+    ):
         """
         Compute and plot the transfer function between two channels, optionally finding the peak
         and damping within a specified frequency range.
@@ -317,8 +380,8 @@ class Test:
         x_data = self.channel[channel_from]._data
         y_data = self.channel[channel_to]._data
         # Set default nperseg if not provided
-        if 'nperseg' not in kwargs:
-            kwargs['nperseg'] = int(len(x_data) / 4.5)
+        if "nperseg" not in kwargs:
+            kwargs["nperseg"] = int(len(x_data) / 4.5)
         # Compute power spectral densities and cross power spectral density
         f, Pxx = sp.signal.welch(x=x_data, fs=fs, **kwargs)
         _, Pyy = sp.signal.welch(x=y_data, fs=fs, **kwargs)
@@ -346,7 +409,9 @@ class Test:
             axis[0].plot(f, t_mag, label=self.description)
             axis[0].set_xlim(0, xlim)
             axis[0].set_xlabel("Frequency (Hz)")
-            axis[0].set_ylabel(f"Transfer Function {self.channel[channel_to].name}/{self.channel[channel_from].name}")
+            axis[0].set_ylabel(
+                f"Transfer Function {self.channel[channel_to].name}/{self.channel[channel_from].name}"
+            )
             axis[0].grid()
         if len(axis) > 1:
             # Plot phase if second axis is provided
@@ -378,17 +443,31 @@ class Test:
             try:
                 t_hb = max(t_n / np.sqrt(2), t_mag[0])
                 eqn = sp.interpolate.interp1d(f, t_mag - t_hb)
-                f_1 = sp.optimize.root_scalar(eqn, bracket=[0, f_n], method='bisect').root
-                f_2 = sp.optimize.root_scalar(eqn, bracket=[f_n, 2 * f_n], method='bisect').root
+                f_1 = sp.optimize.root_scalar(
+                    eqn, bracket=[0, f_n], method="bisect"
+                ).root
+                f_2 = sp.optimize.root_scalar(
+                    eqn, bracket=[f_n, 2 * f_n], method="bisect"
+                ).root
                 ksi = (f_2 - f_1) / (2 * f_n)
                 if axis is not None:
-                    axis[0].plot([f_1, f_2], [t_hb, t_hb], "--", color=axis[0].lines[-1].get_color())
+                    axis[0].plot(
+                        [f_1, f_2],
+                        [t_hb, t_hb],
+                        "--",
+                        color=axis[0].lines[-1].get_color(),
+                    )
             except ValueError:
                 ksi = None
         return axis, [f, t, t_mag, t_rad, t_deg, t_coh], [f_n, t_n], ksi
 
-    def export_to_csv(self, filename: str, channels: list = None,
-        name: bool = False, description: bool = True) -> None:
+    def export_to_csv(
+        self,
+        filename: str,
+        channels: list = None,
+        name: bool = False,
+        description: bool = True,
+    ) -> None:
         """
         Export the data from all channels to a CSV file.
 
@@ -406,7 +485,9 @@ class Test:
         if channels is None:
             selected_channels = self.channel
         else:
-            if not all(isinstance(i, int) and 0 < i < self.no_channels for i in channels):
+            if not all(
+                isinstance(i, int) and 0 < i < self.no_channels for i in channels
+            ):
                 raise ValueError("Invalid channel indices provided.")
             selected_channels = [self.channel[i] for i in channels]
         if not selected_channels:
@@ -429,10 +510,12 @@ class Test:
         data_matrix[:, 0] = self.channel[0]._time
         # Fill channel data
         for i, ch in enumerate(selected_channels):
-            data_matrix[:len(ch._data), i + 1] = ch._data
+            data_matrix[: len(ch._data), i + 1] = ch._data
         # Write to CSV
-        os.makedirs(os.path.dirname(filename), exist_ok=True)  # Ensure the directory exists
-        with open(filename, mode='w', newline='') as file:
+        os.makedirs(
+            os.path.dirname(filename), exist_ok=True
+        )  # Ensure the directory exists
+        with open(filename, mode="w", newline="") as file:
             writer = csv.writer(file)
             writer.writerow(headers)
             writer.writerows(data_matrix)
