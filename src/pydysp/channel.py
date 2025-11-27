@@ -19,6 +19,11 @@ class Channel:
     - Maintains processing parameters (e.g. for trimming and filtering) without modifying the raw data.
     """
 
+    # Default processing parameters
+    DRIFT_DEFAULTS = {"points": 50}
+    FILTER_DEFAULTS = {"btype": "lowpass", "fc": 50.0, "order": 2}
+    BASELINE_DEFAULTS = {"type": "linear"}
+
     # 1D numeric signal values (raw data)
     data: np.ndarray
     # Sampling interval in seconds (used if explicit `time` is not provided)
@@ -100,6 +105,8 @@ class Channel:
         else:
             if self.dt is None:
                 raise ValueError("Either 'time' or 'dt' must be provided")
+            if self.dt <= 0:
+                raise ValueError("dt must be positive")
             n = self.data.shape[0]
             self.time = self.t0 + self.dt * np.arange(n)
 
@@ -144,7 +151,7 @@ class Channel:
         lines.append("-" * (len(title) + 9))
         # Basic signal info
         lines.append(f"Length: {len(self.data)} samples")
-        if self.dt:
+        if self.dt is not None and self.dt > 0:
             lines.append(f"Sampling frequency: fs = {1.0 / self.dt:g} Hz")
             lines.append(f"Timestep: dt = {self.dt:g} s")
         else:
@@ -232,11 +239,10 @@ class Channel:
         Actual correction is applied in processed().
         Defaults: {"points": 50}
         """
-        defaults = {"points": 50}
-        params = {**defaults, **self.drift_params, **override}
+        params = {**self.DRIFT_DEFAULTS, **self.drift_params, **override}
         new = replace(self, drift_params=params)
         new._clear_cache()
-        new.tags = set(self.tags).union({"drift_params"})
+        new.tags = set(self.tags).union({"drift_corrected"})
         new.processing_notes = [
             *self.processing_notes,
             f"Drift params set: {params}",
@@ -250,11 +256,10 @@ class Channel:
         Actual filtering is applied in processed().
         Defaults: {"btype": "lowpass", "fc": 50.0, "order": 2}
         """
-        defaults = {"btype": "lowpass", "fc": 50.0, "order": 2}
-        params = {**defaults, **self.filter_params, **override}
+        params = {**self.FILTER_DEFAULTS, **self.filter_params, **override}
         new = replace(self, filter_params=params)
         new._clear_cache()
-        new.tags = set(self.tags).union({f"filter_params"})
+        new.tags = set(self.tags).union({"filtered"})
         new.processing_notes = [
             *self.processing_notes,
             f"Filter params set: {params}",
@@ -268,12 +273,11 @@ class Channel:
         Actual detrending is applied in processed().
         Defaults: {"type": "linear"}
         """
-        defaults = {"type": "linear"}
-        params = {**defaults, **self.baseline_params, **override}
+        params = {**self.BASELINE_DEFAULTS, **self.baseline_params, **override}
         new = replace(self, baseline_params=params)
         new._clear_cache()
         arg_str = ", ".join(f"{k}={v}" for k, v in params.items()) or ""
-        new.tags = set(self.tags).union({"baseline_params"})
+        new.tags = set(self.tags).union({"baseline_corrected"})
         new.processing_notes = [
             *self.processing_notes,
             f"Baseline params set: detrend({arg_str})",
@@ -293,11 +297,9 @@ class Channel:
         params = {**defaults, **self.trim_params, **override}
         t_start = params["t_start"]
         t_end = params["t_end"]
-        if t_end <= t_start:
-            raise ValueError("t_end must be greater than t_start")
         new = replace(self, trim_params=params)
         new._clear_cache()
-        new.tags = set(self.tags).union({"trim_params"})
+        new.tags = set(self.tags).union({"trimmed"})
         new.processing_notes = [
             *self.processing_notes,
             f"Trim params set: {t_start}–{t_end} s",
@@ -337,8 +339,7 @@ class Channel:
         y = self.data.astype(float, copy=False)
         # 1. Drift correction
         if self.drift_params:
-            defaults = {"points": 50}
-            params = {**defaults, **self.drift_params}
+            params = {**self.DRIFT_DEFAULTS, **self.drift_params}
             points = params["points"]
             if points > len(y):
                 raise ValueError(
@@ -349,8 +350,7 @@ class Channel:
         # 2. Filtering
         if self.filter_params:
             fs = 1.0 / self.dt
-            defaults = {"btype": "lowpass", "fc": 50.0, "order": 2}
-            params = {**defaults, **self.filter_params}
+            params = {**self.FILTER_DEFAULTS, **self.filter_params}
             btype = params["btype"]
             order = params["order"]
             if btype in ("lowpass", "highpass"):
@@ -364,12 +364,23 @@ class Channel:
                 Wn = [2 * f1 / fs, 2 * f2 / fs]
             else:
                 raise ValueError(f"Unsupported filter mode: {btype!r}")
+            if isinstance(Wn, (list, tuple)):
+                if not (0 < Wn[0] < Wn[1] < 1):
+                    raise ValueError(
+                        "Normalized band edges must satisfy 0 < f1 < f2 < fs/2; "
+                        f"got Wn={Wn} with fs={fs}"
+                    )
+            else:
+                if not (0 < Wn < 1):
+                    raise ValueError(
+                        "Normalized cutoff must satisfy 0 < fc < fs/2; "
+                        f"got Wn={Wn} with fs={fs}"
+                    )
             b, a = butter(order, Wn, btype=btype)
             y = filtfilt(b, a, y)
         # 3. Baseline correction
         if self.baseline_params:
-            defaults = {"type": "linear"}
-            params = {**defaults, **self.baseline_params}
+            params = {**self.BASELINE_DEFAULTS, **self.baseline_params}
             y = detrend(y, **params)
         # 4. Trimming
         if self.trim_params:
