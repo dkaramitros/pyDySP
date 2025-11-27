@@ -144,7 +144,7 @@ class Channel:
         lines.append("-" * (len(title) + 9))
         # Basic signal info
         lines.append(f"Length: {len(self.data)} samples")
-        if self.dt is not None:
+        if self.dt:
             lines.append(f"Sampling frequency: fs = {1.0 / self.dt:g} Hz")
             lines.append(f"Timestep: dt = {self.dt:g} s")
         else:
@@ -208,7 +208,7 @@ class Channel:
                 lines.append(f"  Filter params: {self.filter_params}")
             if self.baseline_params:
                 lines.append(f"  Baseline params: {self.baseline_params}")
-            if self.trim_params is not None:
+            if self.trim_params:
                 lines.append(f"  Trim params: {self.trim_params}")
             if self.processing_notes:
                 lines.append("  Notes:")
@@ -227,115 +227,80 @@ class Channel:
 
     def drift_corrected(self, **override: Any) -> "Channel":
         """
-        Return a new Channel with drift removed.
+        Return a new Channel with updated drift parameters.
 
-        Parameters are taken from drift_params, optionally overridden here.
-
+        Actual correction is applied in processed().
         Defaults: {"points": 50}
         """
         defaults = {"points": 50}
         params = {**defaults, **self.drift_params, **override}
-        points = params["points"]
-        if points > len(self.data):
-            raise ValueError(
-                "Number of points for drift correction exceeds data length"
-            )
-        drift_value = float(np.mean(self.data[:points]))
-        new_data = self.data - drift_value
-        # Clone channel with updated data (raw is now drift-corrected)
-        new = replace(self, data=new_data, drift_params=params)
+        new = replace(self, drift_params=params)
         new._clear_cache()
-        new.tags = set(self.tags).union({"drift_corrected"})
+        new.tags = set(self.tags).union({"drift_params"})
         new.processing_notes = [
             *self.processing_notes,
-            f"Drift correction: subtracted mean of first {points} points",
+            f"Drift params set: {params}",
         ]
         return new
 
     def filtered(self, **override: Any) -> "Channel":
         """
-        Return a new Channel with a Butterworth filter applied using scipy.signal.butter.
+        Return a new Channel with updated Butterworth filter parameters.
 
-        Parameters are taken from filter_params, optionally overridden here.
-
+        Actual filtering is applied in processed().
         Defaults: {"btype": "lowpass", "fc": 50.0, "order": 2}
         """
-        if self.dt is None:
-            raise ValueError("Sampling interval dt must be known to apply filter")
         defaults = {"btype": "lowpass", "fc": 50.0, "order": 2}
         params = {**defaults, **self.filter_params, **override}
-        btype = params["btype"]
-        order = params["order"]
-        fs = 1.0 / self.dt
-        if btype in ("lowpass", "highpass"):
-            fc = params["fc"]
-            Wn = 2 * fc / fs
-        elif btype in ("bandpass", "bandstop"):
-            f1 = params.get("f1")
-            f2 = params.get("f2")
-            if f1 is None or f2 is None:
-                raise ValueError("Band filters require f1 and f2")
-            Wn = [2 * f1 / fs, 2 * f2 / fs]
-        else:
-            raise ValueError(f"Unsupported filter mode: {btype!r}")
-        b, a = butter(order, Wn, btype=btype)
-        new_data = filtfilt(b, a, self.data)
-        # Clone channel with updated data (raw is now filtered)
-        new = replace(self, data=new_data, filter_params=params)
+        new = replace(self, filter_params=params)
         new._clear_cache()
-        new.tags = set(self.tags).union({f"filtered_{btype}"})
+        new.tags = set(self.tags).union({f"filter_params"})
         new.processing_notes = [
             *self.processing_notes,
-            f"Filter: Butterworth params={params}",
+            f"Filter params set: {params}",
         ]
         return new
 
     def baseline_corrected(self, **override: Any) -> "Channel":
         """
-        Return a new Channel with baseline (trend) removed using scipy.signal.detrend.
+        Return a new Channel with updated baseline correction parameters.
 
-        Parameters are taken from baseline_params, optionally overridden here.
-
+        Actual detrending is applied in processed().
         Defaults: {"type": "linear"}
         """
         defaults = {"type": "linear"}
         params = {**defaults, **self.baseline_params, **override}
-        new_data = detrend(self.data, **params)
-        # Clone channel with updated data (raw is now baseline-corrected)
-        new = replace(self, data=new_data, baseline_params=params)
+        new = replace(self, baseline_params=params)
         new._clear_cache()
-        new.tags = set(self.tags).union({"baseline_corrected"})
         arg_str = ", ".join(f"{k}={v}" for k, v in params.items()) or ""
+        new.tags = set(self.tags).union({"baseline_params"})
         new.processing_notes = [
             *self.processing_notes,
-            f"Baseline correction: detrend({arg_str})",
+            f"Baseline params set: detrend({arg_str})",
         ]
         return new
 
     def trimmed(self, **override: Any) -> "Channel":
         """
-        Return a new Channel with updated trim window.
+        Return a new Channel with updated trim window parameters.
 
-        Parameters are taken from trim_params, optionally overridden here.
+        Actual trimming is applied in processed().
         """
-        defaults = {}
+        defaults = {
+            "t_start": float(self.time[0]),
+            "t_end": float(self.time[-1]),
+        }
         params = {**defaults, **self.trim_params, **override}
-        t_start = params.get("t_start", self.time[0])
-        t_end = params.get("t_end", self.time[-1])
+        t_start = params["t_start"]
+        t_end = params["t_end"]
         if t_end <= t_start:
             raise ValueError("t_end must be greater than t_start")
-        mask = (self.time >= t_start) & (self.time <= t_end)
-        if not np.any(mask):
-            raise ValueError("Trim window does not overlap channel time range")
-        new_data = self.data[mask]
-        new_time = self.time[mask]
-        # Clone channel with updated trim window
-        new = replace(self, data=new_data, time=new_time, trim_params=params)
+        new = replace(self, trim_params=params)
         new._clear_cache()
-        new.tags = set(self.tags).union({"trim_window"})
+        new.tags = set(self.tags).union({"trim_params"})
         new.processing_notes = [
             *self.processing_notes,
-            f"Trim window set: {t_start}–{t_end} s",
+            f"Trim params set: {t_start}–{t_end} s",
         ]
         return new
 
@@ -347,15 +312,12 @@ class Channel:
         """
         Return (time, data) with processing applied in the following order:
 
-        1. Drift correction via `drift_corrected()`
-        2. Butterworth filter via `filter_params` (scipy.signal.butter)
-        3. Baseline correction via `baseline_params` (scipy.signal.detrend)
-        4. Trimming via `trim_params` (time window)
-        5. Calibration (multiply by `calibration_factor`, if != 1.0)
-
-        Results are cached to avoid unnecessary recomputations.
+        1. Drift correction via drift_params
+        2. Butterworth filter via filter_params
+        3. Baseline correction via baseline_params
+        4. Trimming via trim_params
+        5. Calibration via calibration_factor
         """
-        # Check cache
         signature = (
             tuple(sorted(self.drift_params.items())),
             tuple(sorted(self.filter_params.items())),
@@ -370,21 +332,62 @@ class Channel:
             and self._cache_processed_time is not None
         ):
             return self._cache_processed_time, self._cache_processed_data
-        # Apply processing steps
-        temp_channel = self
+        # Start from raw
+        t = self.time
+        y = self.data.astype(float, copy=False)
+        # 1. Drift correction
         if self.drift_params:
-            temp_channel = temp_channel.drift_corrected()
+            defaults = {"points": 50}
+            params = {**defaults, **self.drift_params}
+            points = params["points"]
+            if points > len(y):
+                raise ValueError(
+                    "Number of points for drift correction exceeds data length"
+                )
+            drift_value = float(np.mean(y[:points]))
+            y = y - drift_value
+        # 2. Filtering
         if self.filter_params:
-            temp_channel = temp_channel.filtered()
+            fs = 1.0 / self.dt
+            defaults = {"btype": "lowpass", "fc": 50.0, "order": 2}
+            params = {**defaults, **self.filter_params}
+            btype = params["btype"]
+            order = params["order"]
+            if btype in ("lowpass", "highpass"):
+                fc = params["fc"]
+                Wn = 2 * fc / fs
+            elif btype in ("bandpass", "bandstop"):
+                f1 = params.get("f1")
+                f2 = params.get("f2")
+                if f1 is None or f2 is None:
+                    raise ValueError("Band filters require f1 and f2")
+                Wn = [2 * f1 / fs, 2 * f2 / fs]
+            else:
+                raise ValueError(f"Unsupported filter mode: {btype!r}")
+            b, a = butter(order, Wn, btype=btype)
+            y = filtfilt(b, a, y)
+        # 3. Baseline correction
         if self.baseline_params:
-            temp_channel = temp_channel.baseline_corrected()
+            defaults = {"type": "linear"}
+            params = {**defaults, **self.baseline_params}
+            y = detrend(y, **params)
+        # 4. Trimming
         if self.trim_params:
-            temp_channel = temp_channel.trimmed()
-        t = temp_channel.time
-        y = temp_channel.data
+            defaults = {"t_start": float(t[0]), "t_end": float(t[-1])}
+            params = {**defaults, **self.trim_params}
+            t_start = params["t_start"]
+            t_end = params["t_end"]
+            if t_end <= t_start:
+                raise ValueError("t_end must be greater than t_start")
+            mask = (t >= t_start) & (t <= t_end)
+            if not np.any(mask):
+                raise ValueError("Trim window does not overlap channel time range")
+            t = t[mask]
+            y = y[mask]
+        # 5. Calibration
         if self.calibration_factor != 1.0:
             y = y * self.calibration_factor
-        # Update cache
+        # Cache result
         if use_cache:
             self._cache_signature = signature
             self._cache_processed_time = t
