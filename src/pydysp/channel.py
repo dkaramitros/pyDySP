@@ -8,7 +8,8 @@ from scipy.signal import detrend, butter, filtfilt, welch
 from scipy.integrate import cumulative_trapezoid
 
 from .spectra import FourierSpectrum, WelchSpectrum
-from .arias import AriasResult, ResponseSpectrum, sdof_newmark_response
+from .arias import AriasResult
+from .response import ResponseSpectrum, sdof_newmark_response
 
 
 @dataclass
