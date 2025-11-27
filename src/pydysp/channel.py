@@ -1369,3 +1369,158 @@ class Channel:
             ax.legend()
         ax.grid(True)
         return ax
+
+    def plot_fourier(
+        self,
+        ax: Optional[plt.Axes] = None,
+        processed: bool = True,
+        use_cache: bool = True,
+        fmax: Optional[float] = None,
+        **plot_kwargs: Any,
+    ) -> plt.Axes:
+        """
+        Plot the Fourier amplitude spectrum of this channel.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on. If None, a new figure and axes are created.
+        processed : bool, optional
+            If True (default), use the processed signal.
+        use_cache : bool, optional
+            Passed through to processed().
+        fmax : float, optional
+            Upper frequency limit for the x-axis.
+        **plot_kwargs
+            Extra keyword arguments forwarded to ``FourierSpectrum.plot``.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The axes with the plot.
+        """
+        spec = self.fourier(processed=processed, use_cache=use_cache)
+        return spec.plot(ax=ax, fmax=fmax, **plot_kwargs)
+
+    def plot_psd(
+        self,
+        ax: Optional[plt.Axes] = None,
+        processed: bool = True,
+        use_cache: bool = True,
+        fmax: Optional[float] = None,
+        **welch_kwargs: Any,
+    ) -> plt.Axes:
+        """
+        Plot the Welch power spectral density of this channel.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on. If None, a new figure and axes are created.
+        processed : bool, optional
+            If True (default), use the processed signal.
+        use_cache : bool, optional
+            Passed through to processed().
+        xlim : float, optional
+            Upper frequency limit for the x-axis.
+        **welch_kwargs
+            Extra keyword arguments forwarded to ``welch_psd`` and then to
+            ``WelchSpectrum.plot``.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The axes with the plot.
+        """
+        spec = self.welch_psd(processed=processed, use_cache=use_cache, **welch_kwargs)
+        return spec.plot(ax=ax, fmax=fmax)
+
+    def plot_arias(
+        self,
+        ax: Optional[plt.Axes] = None,
+        g: float = 9.81,
+        processed: bool = True,
+        use_cache: bool = True,
+        show_window: bool = True,
+        **plot_kwargs: Any,
+    ) -> plt.Axes:
+        """
+        Plot the Arias intensity time history (Husid plot) for this channel.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on. If None, a new figure and axes are created.
+        g : float, optional
+            Acceleration due to gravity (m/s^2). Default 9.81.
+        processed : bool, optional
+            If True (default), use the processed signal.
+        use_cache : bool, optional
+            Passed through to processed().
+        show_window : bool, optional
+            If True, draw vertical lines at the significant duration window.
+        **plot_kwargs
+            Extra keyword arguments forwarded to ``AriasResult.plot``.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The axes with the plot.
+        """
+        res = self.arias_intensity(g=g, processed=processed, use_cache=use_cache)
+        return res.plot(ax=ax, show_window=show_window, **plot_kwargs)
+
+    def plot_response_spectrum(
+        self,
+        ax: Optional[plt.Axes] = None,
+        periods: np.ndarray = np.linspace(0.05, 5.0, 100),
+        ksi: float = 0.05,
+        processed: bool = True,
+        use_cache: bool = True,
+        y: str = "Sa",
+        logx: bool = False,
+        logy: bool = False,
+        **plot_kwargs: Any,
+    ) -> plt.Axes:
+        """
+        Plot the elastic response spectrum for this channel.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on. If None, a new figure and axes are created.
+        periods : np.ndarray, optional
+            Period array passed to ``response_spectrum``.
+        ksi : float, optional
+            Damping ratio passed to ``response_spectrum``.
+        processed : bool, optional
+            If True (default), use the processed signal.
+        use_cache : bool, optional
+            Passed through to processed().
+        y : {'Sa', 'Sv', 'Sd'}, optional
+            Which spectrum to plot. Default 'Sa'.
+        logx : bool, optional
+            Use logarithmic x-axis if True.
+        logy : bool, optional
+            Use logarithmic y-axis if True.
+        **plot_kwargs
+            Extra keyword arguments forwarded to ``ResponseSpectrum.plot``.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The axes with the plot.
+        """
+        rs = self.response_spectrum(
+            periods=periods,
+            ksi=ksi,
+            processed=processed,
+            use_cache=use_cache,
+        )
+        return rs.plot(
+            ax=ax,
+            y=y,
+            logx=logx,
+            logy=logy,
+            **plot_kwargs,
+        )
