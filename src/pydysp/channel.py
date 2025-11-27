@@ -42,7 +42,7 @@ class FourierSpectrum:
     def plot(
         self,
         ax: Optional[plt.Axes] = None,
-        fmax: Optional[float] = 50,
+        fmax: Optional[float] = 50.0,
         **plot_kwargs: Any,
     ) -> plt.Axes:
         """
@@ -53,7 +53,7 @@ class FourierSpectrum:
         ax : matplotlib.axes.Axes, optional
             Axes to plot on. If None, a new figure and axes are created.
         fmax : float, optional
-            Upper x-limit for frequency axis (lower is fixed at 0).
+            Upper x-limit for frequency axis (Default 50.0).
         **plot_kwargs
             Extra keyword arguments forwarded to ax.plot().
 
@@ -108,7 +108,7 @@ class WelchSpectrum:
     def plot(
         self,
         ax: Optional[plt.Axes] = None,
-        fmax: Optional[float] = 50,
+        fmax: Optional[float] = 50.0,
         **plot_kwargs: Any,
     ) -> plt.Axes:
         """
@@ -119,7 +119,7 @@ class WelchSpectrum:
         ax : matplotlib.axes.Axes, optional
             Axes to plot on. If None, a new figure and axes are created.
         fmax : float, optional
-            Upper x-limit for frequency axis (lower is fixed at 0).
+            Upper x-limit for frequency axis (Default 50.0).
         **plot_kwargs
             Extra keyword arguments forwarded to ax.plot().
 
@@ -406,7 +406,7 @@ class Channel:
             self.label_legend = self.name_user
         if self.label_axis is None and self.units is not None:
             base = self.label_legend or self.name_user or ""
-            units = f"[{self.units}]" or ""
+            units = f"[{self.units}]"
             self.label_axis = f"{base} {units}".strip()
 
     # ------------------------------------------------------------------ #
@@ -723,6 +723,8 @@ class Channel:
         Return a new Channel trimmed to the Arias-intensity-based significant
         duration window.
 
+        Data is assumed to be acceleration in g.
+
         By default this uses the classic 5%–95% Arias intensity window.
 
         Parameters
@@ -812,6 +814,8 @@ class Channel:
             y = y - drift_value
         # 2. Filtering
         if self.filter_params:
+            if self.dt is None or self.dt <= 0:
+                raise ValueError("Filtering requires a positive dt (sampling interval)")
             fs = 1.0 / self.dt
             params = {**self.FILTER_DEFAULTS, **self.filter_params}
             btype = params["btype"]
@@ -1153,8 +1157,7 @@ class Channel:
         """
         Compute the Arias intensity time history and significant duration.
 
-        Assumes the channel data represents acceleration in units of g.
-        The data is converted to m/s^2 internally using the factor `g`.
+        Data is assumed to be acceleration in g.
 
         Parameters
         ----------
@@ -1169,8 +1172,8 @@ class Channel:
         Returns
         -------
         AriasResult
-            Structured result with time `t`, intensity `Ia`, final intensity,
-            duration, and indices of 5% and 95% points.
+            Structured result with time `t`, intensity `Ia`,
+            and times of 5% and 95% points.
         """
         t, y = self.xy(processed=processed, use_cache=use_cache)
         if y.size == 0:
@@ -1180,7 +1183,7 @@ class Channel:
         Ia = cumulative_trapezoid(coef * a_mps2**2, t, initial=0.0)
         Ia_final = float(Ia[-1])
         if Ia_final <= 0:
-            return AriasResult(t=t, Ia=Ia, t_start=0, t_end=0)
+            return AriasResult(t=t, Ia=Ia, t_start=float(t[0]), t_end=float(t[-1]))
         idx_start = int(np.argmax(Ia >= 0.05 * Ia_final))
         idx_end = int(np.argmax(Ia >= 0.95 * Ia_final))
         t_start = float(t[idx_start])
@@ -1269,6 +1272,7 @@ class Channel:
     def response_spectrum(
         self,
         periods: np.ndarray = np.linspace(0.05, 5.0, 100),
+        g: float = 9.81,
         ksi: float = 0.05,
         processed: bool = True,
         use_cache: bool = True,
@@ -1277,10 +1281,14 @@ class Channel:
         Compute the elastic response spectrum for a family of SDOF oscillators
         subjected to this channel as base acceleration.
 
+        Data is assumed to be acceleration in g.
+
         Parameters
         ----------
         periods : np.ndarray
             Array of natural periods (s) for which to compute the spectrum.
+        g : float, optional
+            Acceleration due to gravity in m/s^2. Default is 9.81.
         ksi : float, optional
             Damping ratio (e.g. 0.05 for 5% damping). Default is 0.05.
         processed : bool, optional
@@ -1295,6 +1303,7 @@ class Channel:
             Structured response spectrum with Sd, Sv, Sa for each period.
         """
         t, a = self.xy(processed=processed, use_cache=use_cache)
+        a_mps2 = g * a  # convert g to m/s^2
         if a.size == 0:
             raise ValueError("Cannot compute response spectrum of empty signal")
         if self.dt is None or self.dt <= 0:
@@ -1309,7 +1318,9 @@ class Channel:
         Sa = np.zeros_like(periods, dtype=float)
         for i, T in enumerate(periods):
             omega = 2.0 * np.pi / T
-            Sd[i], Sv[i], Sa[i] = self._sdof_newmark_response(a, self.dt, omega, ksi)
+            Sd[i], Sv[i], Sa[i] = self._sdof_newmark_response(
+                a_mps2, self.dt, omega, ksi
+            )
         return ResponseSpectrum(T=periods, Sd=Sd, Sv=Sv, Sa=Sa, ksi=ksi)
 
     # ------------------------------------------------------------------ #
@@ -1358,6 +1369,7 @@ class Channel:
         line_label = self.label_legend or self.name_user or self.name_input
         ax.plot(t, y, label=line_label, **plot_kwargs)
         ax.set_xlabel("Time [s]")
+        ylabel = ax.get_ylabel() or ""
         if include_label and self.label_axis:
             ylabel = self.label_axis
         if include_kind and self.quantity:
@@ -1375,7 +1387,7 @@ class Channel:
         ax: Optional[plt.Axes] = None,
         processed: bool = True,
         use_cache: bool = True,
-        fmax: Optional[float] = None,
+        fmax: Optional[float] = 50.0,
         **plot_kwargs: Any,
     ) -> plt.Axes:
         """
@@ -1390,7 +1402,7 @@ class Channel:
         use_cache : bool, optional
             Passed through to processed().
         fmax : float, optional
-            Upper frequency limit for the x-axis.
+            Upper frequency limit for the x-axis (Default 50.0).
         **plot_kwargs
             Extra keyword arguments forwarded to ``FourierSpectrum.plot``.
 
@@ -1407,7 +1419,7 @@ class Channel:
         ax: Optional[plt.Axes] = None,
         processed: bool = True,
         use_cache: bool = True,
-        fmax: Optional[float] = None,
+        fmax: Optional[float] = 50.0,
         **welch_kwargs: Any,
     ) -> plt.Axes:
         """
@@ -1421,8 +1433,8 @@ class Channel:
             If True (default), use the processed signal.
         use_cache : bool, optional
             Passed through to processed().
-        xlim : float, optional
-            Upper frequency limit for the x-axis.
+        fmax : float, optional
+            Upper frequency limit for the x-axis (Default 50.0).
         **welch_kwargs
             Extra keyword arguments forwarded to ``welch_psd`` and then to
             ``WelchSpectrum.plot``.
@@ -1446,6 +1458,8 @@ class Channel:
     ) -> plt.Axes:
         """
         Plot the Arias intensity time history (Husid plot) for this channel.
+
+        Data is assumed to be acceleration in g.
 
         Parameters
         ----------
