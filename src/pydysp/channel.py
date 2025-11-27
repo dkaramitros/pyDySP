@@ -1,3 +1,4 @@
+# channel.py
 from dataclasses import dataclass, field, replace
 from typing import Optional, Dict, Any
 
@@ -6,289 +7,8 @@ import matplotlib.pyplot as plt
 from scipy.signal import detrend, butter, filtfilt, welch
 from scipy.integrate import cumulative_trapezoid
 
-
-@dataclass
-class FourierSpectrum:
-    """
-    Single-sided Fourier amplitude spectrum.
-
-    Attributes
-    ----------
-    f : np.ndarray
-        Frequency array (Hz).
-    s : np.ndarray
-        Amplitude spectrum |FFT|.
-    """
-
-    f: np.ndarray
-    s: np.ndarray
-
-    def peak(self) -> tuple[float, float]:
-        """
-        Return the frequency and amplitude at the maximum spectral peak.
-
-        Returns
-        -------
-        f_peak : float
-            Frequency at which the spectrum is maximum.
-        s_peak : float
-            Maximum amplitude.
-        """
-        if self.s.size == 0:
-            raise ValueError("Empty spectrum has no peak")
-        idx = int(np.argmax(self.s))
-        return float(self.f[idx]), float(self.s[idx])
-
-    def plot(
-        self,
-        ax: Optional[plt.Axes] = None,
-        fmax: Optional[float] = 50.0,
-        **plot_kwargs: Any,
-    ) -> plt.Axes:
-        """
-        Plot the Fourier amplitude spectrum.
-
-        Parameters
-        ----------
-        ax : matplotlib.axes.Axes, optional
-            Axes to plot on. If None, a new figure and axes are created.
-        fmax : float, optional
-            Upper x-limit for frequency axis (Default 50.0).
-        **plot_kwargs
-            Extra keyword arguments forwarded to ax.plot().
-
-        Returns
-        -------
-        matplotlib.axes.Axes
-            The axes with the plot.
-        """
-        if ax is None:
-            _, ax = plt.subplots()
-        ax.plot(self.f, self.s, **plot_kwargs)
-        ax.set_xlabel("Frequency [Hz]")
-        ax.set_ylabel("Fourier amplitude")
-        if fmax is not None:
-            ax.set_xlim(0.0, fmax)
-        ax.grid(True)
-        return ax
-
-
-@dataclass
-class WelchSpectrum:
-    """
-    Power spectral density (PSD) from Welch's method.
-
-    Attributes
-    ----------
-    f : np.ndarray
-        Frequency array (Hz).
-    p : np.ndarray
-        PSD values corresponding to f.
-    """
-
-    f: np.ndarray
-    p: np.ndarray
-
-    def peak(self) -> tuple[float, float]:
-        """
-        Return the frequency and PSD value at the maximum spectral peak.
-
-        Returns
-        -------
-        f_peak : float
-            Frequency at which the PSD is maximum.
-        p_peak : float
-            Maximum PSD value.
-        """
-        if self.p.size == 0:
-            raise ValueError("Empty PSD has no peak")
-        idx = int(np.argmax(self.p))
-        return float(self.f[idx]), float(self.p[idx])
-
-    def plot(
-        self,
-        ax: Optional[plt.Axes] = None,
-        fmax: Optional[float] = 50.0,
-        **plot_kwargs: Any,
-    ) -> plt.Axes:
-        """
-        Plot the Welch power spectral density.
-
-        Parameters
-        ----------
-        ax : matplotlib.axes.Axes, optional
-            Axes to plot on. If None, a new figure and axes are created.
-        fmax : float, optional
-            Upper x-limit for frequency axis (Default 50.0).
-        **plot_kwargs
-            Extra keyword arguments forwarded to ax.plot().
-
-        Returns
-        -------
-        matplotlib.axes.Axes
-            The axes with the plot.
-        """
-        if ax is None:
-            _, ax = plt.subplots()
-        ax.plot(self.f, self.p, **plot_kwargs)
-        ax.set_xlabel("Frequency [Hz]")
-        ax.set_ylabel("PSD")
-        if fmax is not None:
-            ax.set_xlim(0.0, fmax)
-        ax.grid(True)
-        return ax
-
-
-@dataclass
-class AriasResult:
-    """
-    Arias intensity result.
-
-    Attributes
-    ----------
-    t : np.ndarray
-        Time array.
-    Ia : np.ndarray
-        Arias intensity time history.
-    t_start: float
-        Time corresponding to the 5% point.
-    t_end: float
-        Time corresponding to the 95% point.
-    """
-
-    t: np.ndarray
-    Ia: np.ndarray
-    t_start: float
-    t_end: float
-
-    def plot(
-        self,
-        ax: Optional[plt.Axes] = None,
-        show_window: bool = True,
-        **plot_kwargs: Any,
-    ) -> plt.Axes:
-        """
-        Plot the Arias intensity time history (Husid plot).
-
-        Parameters
-        ----------
-        ax : matplotlib.axes.Axes, optional
-            Axes to plot on. If None, a new figure and axes are created.
-        show_window : bool, optional
-            If True, draw vertical lines at t_start and t_end.
-        **plot_kwargs
-            Extra keyword arguments forwarded to ax.plot().
-
-        Returns
-        -------
-        matplotlib.axes.Axes
-            The axes with the plot.
-        """
-        if ax is None:
-            _, ax = plt.subplots()
-        ax.plot(self.t, self.Ia, **plot_kwargs)
-        ax.set_xlabel("Time [s]")
-        ax.set_ylabel("Arias intensity")
-        if show_window:
-            ax.axvline(self.t_start, linestyle="--", c="gray")
-            ax.axvline(self.t_end, linestyle="--", c="gray")
-        ax.grid(True)
-        return ax
-
-
-@dataclass
-class ResponseSpectrum:
-    """
-    Elastic response spectrum for an SDOF oscillator family.
-
-    Attributes
-    ----------
-    T : np.ndarray
-        Natural periods (s).
-    Sd : np.ndarray
-        Displacement spectrum for each period.
-    Sv : np.ndarray
-        Velocity spectrum for each period.
-    Sa : np.ndarray
-        Pseudo-acceleration spectrum for each period.
-    ksi : float
-        Damping ratio used for the spectrum.
-    """
-
-    T: np.ndarray
-    Sd: np.ndarray
-    Sv: np.ndarray
-    Sa: np.ndarray
-    ksi: float
-
-    def peak(self) -> tuple[float, float]:
-        """
-        Return the dominant period and its corresponding peak spectral acceleration.
-
-        Returns
-        -------
-        T_peak : float
-            Period at which Sa is maximum.
-        Sa_peak : float
-            Maximum spectral acceleration value.
-        """
-        if self.Sa.size == 0:
-            raise ValueError("Empty response spectrum has no peak")
-        idx = int(np.argmax(self.Sa))
-        return float(self.T[idx]), float(self.Sa[idx])
-
-    def plot(
-        self,
-        ax: Optional[plt.Axes] = None,
-        y: str = "Sa",
-        logx: bool = False,
-        logy: bool = False,
-        **plot_kwargs: Any,
-    ) -> plt.Axes:
-        """
-        Plot the response spectrum.
-
-        Parameters
-        ----------
-        ax : matplotlib.axes.Axes, optional
-            Axes to plot on. If None, a new figure and axes are created.
-        y : {'Sa', 'Sv', 'Sd'}, optional
-            Which spectrum to plot: Sa (default), Sv, or Sd.
-        logx : bool, optional
-            Use logarithmic x-axis if True.
-        logy : bool, optional
-            Use logarithmic y-axis if True.
-        **plot_kwargs
-            Extra keyword arguments forwarded to ``ax.plot``.
-
-        Returns
-        -------
-        matplotlib.axes.Axes
-            The axes with the plot.
-        """
-        if ax is None:
-            _, ax = plt.subplots()
-        match y:
-            case "Sa":
-                y = self.Sa
-                ylabel = "Spectral acceleration [g]"
-            case "Sv":
-                y = self.Sv
-                ylabel = "Spectral velocity [m/s]"
-            case "Sd":
-                y = self.Sd
-                ylabel = "Spectral displacement [m]"
-            case _:
-                raise ValueError("y must be one of 'Sa', 'Sv', 'Sd'")
-        ax.plot(self.T, y, **plot_kwargs)
-        ax.set_xlabel("Period [s]")
-        ax.set_ylabel(ylabel)
-        if logx:
-            ax.set_xscale("log")
-        if logy:
-            ax.set_yscale("log")
-        ax.grid(True, which="both")
-        return ax
+from .spectra import FourierSpectrum, WelchSpectrum
+from .arias import AriasResult, ResponseSpectrum, sdof_newmark_response
 
 
 @dataclass
@@ -610,26 +330,6 @@ class Channel:
         This is the classic 'bracketed duration' style trimming. The window is
         defined from the first to the last sample where the signal exceeds the
         threshold, optionally in absolute value, with optional time buffers.
-
-        Parameters
-        ----------
-        threshold : float
-            Amplitude threshold in signal units (e.g. 0.01 if data is in g).
-        use_abs : bool, optional
-            If True (default), use |y| >= threshold. If False, use y >= threshold.
-        buffer_before : float, optional
-            Extra time (s) added before the first exceedance. Default 0.0.
-        buffer_after : float, optional
-            Extra time (s) added after the last exceedance. Default 0.0.
-        processed : bool, optional
-            If True (default), use the processed signal.
-        use_cache : bool, optional
-            Passed through to processed().
-
-        Returns
-        -------
-        Channel
-            New Channel with updated trim_params.
         """
         t, y = self.xy(processed=processed, use_cache=use_cache)
         if y.size == 0:
@@ -664,27 +364,6 @@ class Channel:
         """
         Return a new Channel trimmed to where the signal is above a fraction
         of its peak amplitude.
-
-        Parameters
-        ----------
-        fraction : float
-            Fraction of the peak amplitude in (0, 1], e.g. 0.05 for 5% of peak.
-        use_abs : bool, optional
-            If True (default), peak and threshold are based on |y|.
-            If False, peak and threshold are based on y (positive peaks only).
-        buffer_before : float, optional
-            Extra time (s) added before the first exceedance. Default 0.0.
-        buffer_after : float, optional
-            Extra time (s) added after the last exceedance. Default 0.0.
-        processed : bool, optional
-            If True (default), use the processed signal.
-        use_cache : bool, optional
-            Passed through to processed().
-
-        Returns
-        -------
-        Channel
-            New Channel with updated trim_params.
         """
         if not (0.0 < fraction <= 1.0):
             raise ValueError("fraction must be in (0, 1]")
@@ -724,30 +403,6 @@ class Channel:
         duration window.
 
         Data is assumed to be acceleration in g.
-
-        By default this uses the classic 5%–95% Arias intensity window.
-
-        Parameters
-        ----------
-        lower : float, optional
-            Lower fraction of final Arias intensity, in [0, 1). Default 0.05.
-        upper : float, optional
-            Upper fraction of final Arias intensity, in (0, 1]. Default 0.95.
-        g : float, optional
-            Acceleration due to gravity (m/s^2). Default 9.81.
-        buffer_before : float, optional
-            Extra time (s) added before the lower Arias crossing. Default 0.0.
-        buffer_after : float, optional
-            Extra time (s) added after the upper Arias crossing. Default 0.0.
-        processed : bool, optional
-            If True (default), use the processed signal.
-        use_cache : bool, optional
-            Passed through to processed().
-
-        Returns
-        -------
-        Channel
-            New Channel with updated trim_params.
         """
         if not (0.0 <= lower < upper <= 1.0):
             raise ValueError("Require 0 <= lower < upper <= 1")
@@ -877,14 +532,6 @@ class Channel:
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Convenience method to get (x, y) for plotting.
-
-        Parameters
-        ----------
-        processed : bool, optional
-            If True (default), returns the processed view via processed().
-            If False, returns the raw time and raw data exactly as stored.
-        use_cache : bool, optional
-            Passed through to processed().
         """
         if processed:
             return self.processed(use_cache=use_cache)
@@ -902,21 +549,6 @@ class Channel:
     ) -> tuple[float, float]:
         """
         Return the time and value where the data reaches its maximum absolute amplitude.
-
-        Parameters
-        ----------
-        processed : bool, optional
-            If True (default), use the processed view.
-            If False, use the raw data.
-        use_cache : bool, optional
-            Passed through to processed().
-
-        Returns
-        -------
-        t_peak : float
-            Time at which |data| is maximum.
-        y_peak : float
-            Data value at that time (keeps original sign).
         """
         t, y = self.xy(processed=processed, use_cache=use_cache)
         if y.size == 0:
@@ -931,21 +563,6 @@ class Channel:
     ) -> tuple[float, float]:
         """
         Return the time and value of the maximum data value (positive peak).
-
-        Parameters
-        ----------
-        processed : bool, optional
-            If True (default), use the processed view.
-            If False, use the raw data.
-        use_cache : bool, optional
-            Passed through to processed().
-
-        Returns
-        -------
-        t_max : float
-            Time at which data reaches its maximum value.
-        y_max : float
-            Maximum data value.
         """
         t, y = self.xy(processed=processed, use_cache=use_cache)
         if y.size == 0:
@@ -960,21 +577,6 @@ class Channel:
     ) -> tuple[float, float]:
         """
         Return the time and value of the minimum data value (negative peak).
-
-        Parameters
-        ----------
-        processed : bool, optional
-            If True (default), use the processed view.
-            If False, use the raw data.
-        use_cache : bool, optional
-            Passed through to processed().
-
-        Returns
-        -------
-        t_min : float
-            Time at which data reaches its minimum value.
-        y_min : float
-            Minimum data value.
         """
         t, y = self.xy(processed=processed, use_cache=use_cache)
         if y.size == 0:
@@ -989,19 +591,6 @@ class Channel:
     ) -> float:
         """
         Compute the Root Mean Square (RMS) value of the channel.
-
-        Parameters
-        ----------
-        processed : bool, optional
-            If True (default), use the processed signal (including calibration).
-            If False, use the raw data as stored.
-        use_cache : bool, optional
-            Passed through to processed().
-
-        Returns
-        -------
-        float
-            RMS value of the selected signal.
         """
         _, y = self.xy(processed=processed, use_cache=use_cache)
         if y.size == 0:
@@ -1019,20 +608,6 @@ class Channel:
     ) -> FourierSpectrum:
         """
         Compute the (single-sided) Fourier amplitude spectrum of the channel.
-
-        Parameters
-        ----------
-        processed : bool, optional
-            If True (default), use the processed signal (via processed()).
-            If False, use the raw data.
-        use_cache : bool, optional
-            Passed through to processed().
-
-        Returns
-        -------
-        FourierSpectrum
-            Object containing frequency array `f` and amplitude spectrum `s`,
-            with a `.peak()` helper.
         """
         _, y = self.xy(processed=processed, use_cache=use_cache)
         n = len(y)
@@ -1053,20 +628,6 @@ class Channel:
         """
         Convenience wrapper returning the dominant frequency and its amplitude
         from the Fourier spectrum.
-
-        Parameters
-        ----------
-        processed : bool, optional
-            If True (default), use the processed signal.
-        use_cache : bool, optional
-            Passed through to processed().
-
-        Returns
-        -------
-        f_peak : float
-            Frequency at the maximum amplitude in the spectrum.
-        s_peak : float
-            Maximum amplitude value.
         """
         spec = self.fourier(processed=processed, use_cache=use_cache)
         return spec.peak()
@@ -1083,24 +644,6 @@ class Channel:
     ) -> WelchSpectrum:
         """
         Compute the Power Spectral Density (PSD) using Welch's method.
-
-        Parameters
-        ----------
-        processed : bool, optional
-            If True (default), use the processed signal.
-            If False, use the raw data.
-        use_cache : bool, optional
-            Passed through to processed().
-        **kwargs
-            Additional keyword arguments passed to scipy.signal.welch.
-            If 'nperseg' is not given, a MATLAB-like default is used:
-            nperseg = min(256, len(y)).
-
-        Returns
-        -------
-        WelchSpectrum
-            Object containing frequency array `f` and PSD values `p`,
-            with a `.peak()` helper.
         """
         _, y = self.xy(processed=processed, use_cache=use_cache)
         n = len(y)
@@ -1123,23 +666,6 @@ class Channel:
         """
         Convenience wrapper returning the dominant frequency and PSD amplitude
         from the Welch spectrum.
-
-        Parameters
-        ----------
-        processed : bool, optional
-            If True (default), use the processed signal.
-            If False, use the raw data.
-        use_cache : bool, optional
-            Passed through to processed().
-        **kwargs
-            Additional keyword arguments passed to scipy.signal.welch.
-
-        Returns
-        -------
-        f_peak : float
-            Frequency at which the PSD is maximum.
-        p_peak : float
-            Maximum PSD value.
         """
         psd = self.welch_psd(processed=processed, use_cache=use_cache, **kwargs)
         return psd.peak()
@@ -1158,22 +684,6 @@ class Channel:
         Compute the Arias intensity time history and significant duration.
 
         Data is assumed to be acceleration in g.
-
-        Parameters
-        ----------
-        g : float, optional
-            Acceleration due to gravity in m/s^2. Default is 9.81.
-        processed : bool, optional
-            If True (default), use the processed signal.
-            If False, use the raw data.
-        use_cache : bool, optional
-            Passed through to processed().
-
-        Returns
-        -------
-        AriasResult
-            Structured result with time `t`, intensity `Ia`,
-            and times of 5% and 95% points.
         """
         t, y = self.xy(processed=processed, use_cache=use_cache)
         if y.size == 0:
@@ -1199,76 +709,6 @@ class Channel:
     # Response spectrum (SDOF, Newmark-beta average acceleration)
     # ------------------------------------------------------------------ #
 
-    def _sdof_newmark_response(
-        self,
-        acc: np.ndarray,
-        dt: float,
-        omega: float,
-        ksi: float,
-    ) -> tuple[float, float, float]:
-        """
-        Internal helper: Newmark-beta (average acceleration) SDOF response to
-        base acceleration.
-
-        Parameters
-        ----------
-        acc : np.ndarray
-            Ground acceleration time history a_g(t) (m/s^2).
-        dt : float
-            Time step (s).
-        omega : float
-            Circular frequency of the oscillator (rad/s).
-        ksi : float
-            Damping ratio.
-
-        Returns
-        -------
-        Sd : float
-            Peak relative displacement.
-        Sv : float
-            Peak relative velocity.
-        Sa : float
-            Peak absolute acceleration.
-        """
-        n = len(acc)
-        if n == 0:
-            return 0.0, 0.0, 0.0
-        m = 1.0
-        k = m * omega**2
-        c = 2.0 * ksi * omega * m
-        # Newmark average acceleration parameters
-        gamma = 0.5
-        beta = 0.25
-        u = np.zeros(n)
-        v = np.zeros(n)
-        a_rel = np.zeros(n)
-        # Initial relative acceleration from equilibrium
-        a_rel[0] = (-acc[0] - c * v[0] - k * u[0]) / m
-        a0 = 1.0 / (beta * dt**2)
-        a1 = gamma / (beta * dt)
-        a2 = 1.0 / (beta * dt)
-        a3 = 1.0 / (2.0 * beta) - 1.0
-        a4 = gamma / beta - 1.0
-        a5 = dt * (gamma / (2.0 * beta) - 1.0)
-        k_eff = k + a0 * m + a1 * c
-        p = -m * acc
-        for i in range(n - 1):
-            dp = (
-                p[i + 1]
-                - p[i]
-                + m * (a0 * u[i] + a2 * v[i] + a3 * a_rel[i])
-                + c * (a1 * u[i] + a4 * v[i] + a5 * a_rel[i])
-            )
-            du = dp / k_eff
-            u[i + 1] = u[i] + du
-            a_rel[i + 1] = a0 * (u[i + 1] - u[i]) - a2 * v[i] - a3 * a_rel[i]
-            v[i + 1] = v[i] + dt * ((1.0 - gamma) * a_rel[i] + gamma * a_rel[i + 1])
-        Sd = float(np.max(np.abs(u)))
-        Sv = float(np.max(np.abs(v)))
-        a_abs = a_rel + acc
-        Sa = float(np.max(np.abs(a_abs)))
-        return Sd, Sv, Sa
-
     def response_spectrum(
         self,
         periods: np.ndarray = np.linspace(0.05, 5.0, 100),
@@ -1282,25 +722,6 @@ class Channel:
         subjected to this channel as base acceleration.
 
         Data is assumed to be acceleration in g.
-
-        Parameters
-        ----------
-        periods : np.ndarray
-            Array of natural periods (s) for which to compute the spectrum.
-        g : float, optional
-            Acceleration due to gravity in m/s^2. Default is 9.81.
-        ksi : float, optional
-            Damping ratio (e.g. 0.05 for 5% damping). Default is 0.05.
-        processed : bool, optional
-            If True (default), use the processed signal.
-            If False, use the raw data.
-        use_cache : bool, optional
-            Passed through to processed().
-
-        Returns
-        -------
-        ResponseSpectrum
-            Structured response spectrum with Sd, Sv, Sa for each period.
         """
         _, a = self.xy(processed=processed, use_cache=use_cache)
         if a.size == 0:
@@ -1318,9 +739,7 @@ class Channel:
         Sa = np.zeros_like(periods, dtype=float)
         for i, T in enumerate(periods):
             omega = 2.0 * np.pi / T
-            Sd[i], Sv[i], Sa[i] = self._sdof_newmark_response(
-                a_mps2, self.dt, omega, ksi
-            )
+            Sd[i], Sv[i], Sa[i] = sdof_newmark_response(a_mps2, self.dt, omega, ksi)
         Sa_g = Sa / g  # convert back to g
         return ResponseSpectrum(T=periods, Sd=Sd, Sv=Sv, Sa=Sa_g, ksi=ksi)
 
@@ -1340,29 +759,6 @@ class Channel:
     ) -> plt.Axes:
         """
         Plot the time history of this channel.
-
-        Parameters
-        ----------
-        ax : matplotlib.axes.Axes, optional
-            Existing axes to plot on. If None, a new figure and axes are created.
-        processed : bool, optional
-            If True (default), plot the processed view. If False, plot raw data.
-        use_cache : bool, optional
-            Passed through to processed().
-        include_label : bool, optional
-            If True (default), use the channel's label_axis for the y-axis label.
-        include_kind : bool, optional
-            If True, include the channel's quantity for the y-axis label.
-            This overrides include_label if both are True.
-        include_legend : bool, optional
-            If True, use the channel's label_legend for the legend.
-        **plot_kwargs
-            Extra keyword arguments forwarded to ``ax.plot``.
-
-        Returns
-        -------
-        matplotlib.axes.Axes
-            The axes with the plot.
         """
         if ax is None:
             _, ax = plt.subplots()
@@ -1393,24 +789,6 @@ class Channel:
     ) -> plt.Axes:
         """
         Plot the Fourier amplitude spectrum of this channel.
-
-        Parameters
-        ----------
-        ax : matplotlib.axes.Axes, optional
-            Axes to plot on. If None, a new figure and axes are created.
-        processed : bool, optional
-            If True (default), use the processed signal.
-        use_cache : bool, optional
-            Passed through to processed().
-        fmax : float, optional
-            Upper frequency limit for the x-axis (Default 50.0).
-        **plot_kwargs
-            Extra keyword arguments forwarded to ``FourierSpectrum.plot``.
-
-        Returns
-        -------
-        matplotlib.axes.Axes
-            The axes with the plot.
         """
         spec = self.fourier(processed=processed, use_cache=use_cache)
         return spec.plot(ax=ax, fmax=fmax, **plot_kwargs)
@@ -1425,25 +803,6 @@ class Channel:
     ) -> plt.Axes:
         """
         Plot the Welch power spectral density of this channel.
-
-        Parameters
-        ----------
-        ax : matplotlib.axes.Axes, optional
-            Axes to plot on. If None, a new figure and axes are created.
-        processed : bool, optional
-            If True (default), use the processed signal.
-        use_cache : bool, optional
-            Passed through to processed().
-        fmax : float, optional
-            Upper frequency limit for the x-axis (Default 50.0).
-        **welch_kwargs
-            Extra keyword arguments forwarded to ``welch_psd`` and then to
-            ``WelchSpectrum.plot``.
-
-        Returns
-        -------
-        matplotlib.axes.Axes
-            The axes with the plot.
         """
         spec = self.welch_psd(processed=processed, use_cache=use_cache, **welch_kwargs)
         return spec.plot(ax=ax, fmax=fmax)
@@ -1461,26 +820,6 @@ class Channel:
         Plot the Arias intensity time history (Husid plot) for this channel.
 
         Data is assumed to be acceleration in g.
-
-        Parameters
-        ----------
-        ax : matplotlib.axes.Axes, optional
-            Axes to plot on. If None, a new figure and axes are created.
-        g : float, optional
-            Acceleration due to gravity (m/s^2). Default 9.81.
-        processed : bool, optional
-            If True (default), use the processed signal.
-        use_cache : bool, optional
-            Passed through to processed().
-        show_window : bool, optional
-            If True, draw vertical lines at the significant duration window.
-        **plot_kwargs
-            Extra keyword arguments forwarded to ``AriasResult.plot``.
-
-        Returns
-        -------
-        matplotlib.axes.Axes
-            The axes with the plot.
         """
         res = self.arias_intensity(g=g, processed=processed, use_cache=use_cache)
         return res.plot(ax=ax, show_window=show_window, **plot_kwargs)
@@ -1499,32 +838,6 @@ class Channel:
     ) -> plt.Axes:
         """
         Plot the elastic response spectrum for this channel.
-
-        Parameters
-        ----------
-        ax : matplotlib.axes.Axes, optional
-            Axes to plot on. If None, a new figure and axes are created.
-        periods : np.ndarray, optional
-            Period array passed to ``response_spectrum``.
-        ksi : float, optional
-            Damping ratio passed to ``response_spectrum``.
-        processed : bool, optional
-            If True (default), use the processed signal.
-        use_cache : bool, optional
-            Passed through to processed().
-        y : {'Sa', 'Sv', 'Sd'}, optional
-            Which spectrum to plot. Default 'Sa'.
-        logx : bool, optional
-            Use logarithmic x-axis if True.
-        logy : bool, optional
-            Use logarithmic y-axis if True.
-        **plot_kwargs
-            Extra keyword arguments forwarded to ``ResponseSpectrum.plot``.
-
-        Returns
-        -------
-        matplotlib.axes.Axes
-            The axes with the plot.
         """
         rs = self.response_spectrum(
             periods=periods,
