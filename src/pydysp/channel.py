@@ -8,6 +8,143 @@ from scipy.integrate import cumulative_trapezoid
 
 
 @dataclass
+class FourierSpectrum:
+    """
+    Single-sided Fourier amplitude spectrum.
+
+    Attributes
+    ----------
+    f : np.ndarray
+        Frequency array (Hz).
+    s : np.ndarray
+        Amplitude spectrum |FFT|.
+    """
+
+    f: np.ndarray
+    s: np.ndarray
+
+    # Peak helper
+    def peak(self) -> tuple[float, float]:
+        """
+        Return the frequency and amplitude at the maximum spectral peak.
+
+        Returns
+        -------
+        f_peak : float
+            Frequency at which the spectrum is maximum.
+        s_peak : float
+            Maximum amplitude.
+        """
+        if self.s.size == 0:
+            raise ValueError("Empty spectrum has no peak")
+        idx = int(np.argmax(self.s))
+        return float(self.f[idx]), float(self.s[idx])
+
+
+@dataclass
+class WelchSpectrum:
+    """
+    Power spectral density (PSD) from Welch's method.
+
+    Attributes
+    ----------
+    f : np.ndarray
+        Frequency array (Hz).
+    p : np.ndarray
+        PSD values corresponding to f.
+    """
+
+    f: np.ndarray
+    p: np.ndarray
+
+    # Peak helper
+    def peak(self) -> tuple[float, float]:
+        """
+        Return the frequency and PSD value at the maximum spectral peak.
+
+        Returns
+        -------
+        f_peak : float
+            Frequency at which the PSD is maximum.
+        p_peak : float
+            Maximum PSD value.
+        """
+        if self.p.size == 0:
+            raise ValueError("Empty PSD has no peak")
+        idx = int(np.argmax(self.p))
+        return float(self.f[idx]), float(self.p[idx])
+
+
+@dataclass
+class AriasResult:
+    """
+    Arias intensity result.
+
+    Attributes
+    ----------
+    t : np.ndarray
+        Time array.
+    Ia : np.ndarray
+        Arias intensity time history.
+    Ia_final : float
+        Final Arias intensity value.
+    duration : float
+        Significant duration between 5% and 95% of Ia_final.
+    idx_start : int
+        Index corresponding to the 5% point.
+    idx_end : int
+        Index corresponding to the 95% point.
+    """
+
+    t: np.ndarray
+    Ia: np.ndarray
+    t_start: float
+    t_end: float
+
+
+@dataclass
+class ResponseSpectrum:
+    """
+    Elastic response spectrum for an SDOF oscillator family.
+
+    Attributes
+    ----------
+    T : np.ndarray
+        Natural periods (s).
+    Sd : np.ndarray
+        Displacement spectrum for each period.
+    Sv : np.ndarray
+        Velocity spectrum for each period.
+    Sa : np.ndarray
+        Pseudo-acceleration spectrum for each period.
+    ksi : float
+        Damping ratio used for the spectrum.
+    """
+
+    T: np.ndarray
+    Sd: np.ndarray
+    Sv: np.ndarray
+    Sa: np.ndarray
+    ksi: float
+
+    def peak(self) -> tuple[float, float]:
+        """
+        Return the dominant period and its corresponding peak spectral acceleration.
+
+        Returns
+        -------
+        T_peak : float
+            Period at which Sa is maximum.
+        Sa_peak : float
+            Maximum spectral acceleration value.
+        """
+        if self.Sa.size == 0:
+            raise ValueError("Empty response spectrum has no peak")
+        idx = int(np.argmax(self.Sa))
+        return float(self.T[idx]), float(self.Sa[idx])
+
+
+@dataclass
 class Channel:
     """
     Represents a single experimental time-history channel.
@@ -424,90 +561,434 @@ class Channel:
         else:
             return self.time, self.data
 
-    def timehistory(self) -> tuple[np.ndarray, list[float]]:
-        """
-        Returns the time history data.
+    # ------------------------------------------------------------------ #
+    # Simple time-domain peaks and RMS
+    # ------------------------------------------------------------------ #
 
-        Returns:
-            np.ndarray: Array of time and scaled data values.
-            list: Maximum time and data values.
+    def max_abs(
+        self,
+        processed: bool = True,
+        use_cache: bool = True,
+    ) -> tuple[float, float]:
         """
-        t = self._time
-        y = self._data * self.calibration
-        index = np.argmax(np.abs(y))
-        t_max = t[index]
-        y_max = y[index]
-        return np.array([t, y]), [t_max, y_max]
+        Return the time and value where the data reaches its maximum absolute amplitude.
 
-    def fourier(self) -> tuple[np.ndarray, list[float]]:
+        Parameters
+        ----------
+        processed : bool, optional
+            If True (default), use the processed view.
+            If False, use the raw data.
+        use_cache : bool, optional
+            Passed through to processed().
+
+        Returns
+        -------
+        t_peak : float
+            Time at which |data| is maximum.
+        y_peak : float
+            Data value at that time (keeps original sign).
         """
-        Computes the Fourier transform of the data.
+        t, y = self.xy(processed=processed, use_cache=use_cache)
+        if y.size == 0:
+            raise ValueError("Cannot compute max_abs of empty signal")
+        idx = int(np.argmax(np.abs(y)))
+        return float(t[idx]), float(y[idx])
 
-        Returns:
-            np.ndarray: Array of frequencies and Fourier amplitudes.
-            list: Maximum frequency and amplitude values.
+    def max_value(
+        self,
+        processed: bool = True,
+        use_cache: bool = True,
+    ) -> tuple[float, float]:
         """
-        [t, y] = self.timehistory()[0]
-        _no_freqs = int(2 ** (self._points - 1).bit_length())
-        f = np.fft.rfftfreq(n=_no_freqs, d=self._timestep)
-        s = np.abs(np.fft.rfft(a=y, n=_no_freqs))
-        index = np.argmax(s)
-        f_n = f[index]
-        s_max = s[index]
-        return np.array([f, s]), [f_n, s_max]
+        Return the time and value of the maximum data value (positive peak).
 
-    def welch(self, **kwargs) -> tuple[np.ndarray, list[float]]:
+        Parameters
+        ----------
+        processed : bool, optional
+            If True (default), use the processed view.
+            If False, use the raw data.
+        use_cache : bool, optional
+            Passed through to processed().
+
+        Returns
+        -------
+        t_max : float
+            Time at which data reaches its maximum value.
+        y_max : float
+            Maximum data value.
         """
-        Computes the Power Spectral Density using Welch's method.
+        t, y = self.xy(processed=processed, use_cache=use_cache)
+        if y.size == 0:
+            raise ValueError("Cannot compute max_value of empty signal")
+        idx = int(np.argmax(y))
+        return float(t[idx]), float(y[idx])
 
-        Parameters:
-            **kwargs**: Additional keyword arguments to pass to scipy.signal.welch.
-
-        Returns:
-            np.ndarray: Array of frequencies and power spectral densities.
-            list: Maximum frequency and power spectral density values.
+    def min_value(
+        self,
+        processed: bool = True,
+        use_cache: bool = True,
+    ) -> tuple[float, float]:
         """
+        Return the time and value of the minimum data value (negative peak).
+
+        Parameters
+        ----------
+        processed : bool, optional
+            If True (default), use the processed view.
+            If False, use the raw data.
+        use_cache : bool, optional
+            Passed through to processed().
+
+        Returns
+        -------
+        t_min : float
+            Time at which data reaches its minimum value.
+        y_min : float
+            Minimum data value.
+        """
+        t, y = self.xy(processed=processed, use_cache=use_cache)
+        if y.size == 0:
+            raise ValueError("Cannot compute min_value of empty signal")
+        idx = int(np.argmin(y))
+        return float(t[idx]), float(y[idx])
+
+    def rms(
+        self,
+        processed: bool = True,
+        use_cache: bool = True,
+    ) -> float:
+        """
+        Compute the Root Mean Square (RMS) value of the channel.
+
+        Parameters
+        ----------
+        processed : bool, optional
+            If True (default), use the processed signal (including calibration).
+            If False, use the raw data as stored.
+        use_cache : bool, optional
+            Passed through to processed().
+
+        Returns
+        -------
+        float
+            RMS value of the selected signal.
+        """
+        _, y = self.xy(processed=processed, use_cache=use_cache)
+        if y.size == 0:
+            raise ValueError("Cannot compute RMS of empty signal")
+        return float(np.sqrt(np.mean(y**2)))
+
+    # ------------------------------------------------------------------ #
+    # Fourier amplitude spectrum + peak
+    # ------------------------------------------------------------------ #
+
+    def fourier(
+        self,
+        processed: bool = True,
+        use_cache: bool = True,
+    ) -> FourierSpectrum:
+        """
+        Compute the (single-sided) Fourier amplitude spectrum of the channel.
+
+        Parameters
+        ----------
+        processed : bool, optional
+            If True (default), use the processed signal (via processed()).
+            If False, use the raw data.
+        use_cache : bool, optional
+            Passed through to processed().
+
+        Returns
+        -------
+        FourierSpectrum
+            Object containing frequency array `f` and amplitude spectrum `s`,
+            with a `.peak()` helper.
+        """
+        _, y = self.xy(processed=processed, use_cache=use_cache)
+        n = len(y)
+        if n == 0:
+            raise ValueError("Cannot compute Fourier spectrum of empty signal")
+        if self.dt is None or self.dt <= 0:
+            raise ValueError("Fourier transform requires a positive dt")
+        n_fft = 1 << (n - 1).bit_length()
+        f = np.fft.rfftfreq(n=n_fft, d=self.dt)
+        s = np.abs(np.fft.rfft(y, n=n_fft))
+        return FourierSpectrum(f=f, s=s)
+
+    def fourier_peak(
+        self,
+        processed: bool = True,
+        use_cache: bool = True,
+    ) -> tuple[float, float]:
+        """
+        Convenience wrapper returning the dominant frequency and its amplitude
+        from the Fourier spectrum.
+
+        Parameters
+        ----------
+        processed : bool, optional
+            If True (default), use the processed signal.
+        use_cache : bool, optional
+            Passed through to processed().
+
+        Returns
+        -------
+        f_peak : float
+            Frequency at the maximum amplitude in the spectrum.
+        s_peak : float
+            Maximum amplitude value.
+        """
+        spec = self.fourier(processed=processed, use_cache=use_cache)
+        return spec.peak()
+
+    # ------------------------------------------------------------------ #
+    # Welch PSD + peak (MATLAB-ish defaults)
+    # ------------------------------------------------------------------ #
+
+    def welch_psd(
+        self,
+        processed: bool = True,
+        use_cache: bool = True,
+        **kwargs: Any,
+    ) -> WelchSpectrum:
+        """
+        Compute the Power Spectral Density (PSD) using Welch's method.
+
+        Parameters
+        ----------
+        processed : bool, optional
+            If True (default), use the processed signal.
+            If False, use the raw data.
+        use_cache : bool, optional
+            Passed through to processed().
+        **kwargs
+            Additional keyword arguments passed to scipy.signal.welch.
+            If 'nperseg' is not given, a MATLAB-like default is used:
+            nperseg = min(256, len(y)).
+
+        Returns
+        -------
+        WelchSpectrum
+            Object containing frequency array `f` and PSD values `p`,
+            with a `.peak()` helper.
+        """
+        t, y = self.xy(processed=processed, use_cache=use_cache)
+        n = len(y)
+        if n == 0:
+            raise ValueError("Cannot compute Welch PSD of empty signal")
+        if self.dt is None or self.dt <= 0:
+            raise ValueError("Welch PSD requires a positive dt")
+        fs = 1.0 / self.dt
         if "nperseg" not in kwargs:
-            kwargs["nperseg"] = int(len(self._data) / 4.5)
-        f, p = welch(x=self._data, fs=1 / self._timestep, **kwargs)
-        index = np.argmax(p)
-        f_n = f[index]
-        p_max = p[index]
-        return np.array([f, p]), [f_n, p_max]
+            kwargs["nperseg"] = min(256, n)
+        f, p = welch(x=y, fs=fs, **kwargs)
+        return WelchSpectrum(f=f, p=p)
 
-    def arias(
-        self, g: float = 9.81
-    ) -> tuple[list[np.ndarray, np.ndarray], float, float, list[int]]:
+    def welch_peak(
+        self,
+        processed: bool = True,
+        use_cache: bool = True,
+        **kwargs: Any,
+    ) -> tuple[float, float]:
         """
-        Computes the Arias intensity.
+        Convenience wrapper returning the dominant frequency and PSD amplitude
+        from the Welch spectrum.
 
-        Parameters:
-            g (float): Acceleration due to gravity.
+        Parameters
+        ----------
+        processed : bool, optional
+            If True (default), use the processed signal.
+            If False, use the raw data.
+        use_cache : bool, optional
+            Passed through to processed().
+        **kwargs
+            Additional keyword arguments passed to scipy.signal.welch.
 
-        Returns:
-            list: Time values and Arias intensity values.
-            float: Final Arias intensity value.
-            float: Duration of the significant shaking.
-            list: Start and end indices for the significant shaking period.
+        Returns
+        -------
+        f_peak : float
+            Frequency at which the PSD is maximum.
+        p_peak : float
+            Maximum PSD value.
         """
-        arias = cumulative_trapezoid(
-            x=self._time, y=np.pi / 2 / 9.81 * (g * self._data * self.calibration) ** 2
+        psd = self.welch_psd(processed=processed, use_cache=use_cache, **kwargs)
+        return psd.peak()
+
+    # ------------------------------------------------------------------ #
+    # Arias intensity
+    # ------------------------------------------------------------------ #
+
+    def arias_intensity(
+        self,
+        g: float = 9.81,
+        processed: bool = True,
+        use_cache: bool = True,
+    ) -> AriasResult:
+        """
+        Compute the Arias intensity time history and significant duration.
+
+        Assumes the channel data represents acceleration in units of g.
+        The data is converted to m/s^2 internally using the factor `g`.
+
+        Parameters
+        ----------
+        g : float, optional
+            Acceleration due to gravity in m/s^2. Default is 9.81.
+        processed : bool, optional
+            If True (default), use the processed signal.
+            If False, use the raw data.
+        use_cache : bool, optional
+            Passed through to processed().
+
+        Returns
+        -------
+        AriasResult
+            Structured result with time `t`, intensity `Ia`, final intensity,
+            duration, and indices of 5% and 95% points.
+        """
+        t, y = self.xy(processed=processed, use_cache=use_cache)
+        if y.size == 0:
+            raise ValueError("Cannot compute Arias intensity of empty signal")
+        a_mps2 = g * y
+        coef = np.pi / (2.0 * g)
+        Ia = cumulative_trapezoid(coef * a_mps2**2, t, initial=0.0)
+        Ia_final = float(Ia[-1])
+        if Ia_final <= 0:
+            return AriasResult(t=t, Ia=Ia, t_start=0, t_end=0)
+        idx_start = int(np.argmax(Ia >= 0.05 * Ia_final))
+        idx_end = int(np.argmax(Ia >= 0.95 * Ia_final))
+        t_start = float(t[idx_start])
+        t_end = float(t[idx_end])
+        return AriasResult(
+            t=t,
+            Ia=Ia,
+            t_start=t_start,
+            t_end=t_end,
         )
-        arias = np.append(arias, arias[-1])
-        start = np.argmax(arias > 0.05 * arias[-1])
-        end = np.argmax(arias > 0.95 * arias[-1])
-        duration = self._time[end] - self._time[start]
-        return [self._time, arias], arias[-1], duration, [start, end]
 
-    def rms(self) -> float:
-        """
-        Computes the Root Mean Square (RMS) of the data.
+    # ------------------------------------------------------------------ #
+    # Response spectrum (SDOF, Newmark-beta average acceleration)
+    # ------------------------------------------------------------------ #
 
-        Returns:
-            float: RMS value.
+    def _sdof_newmark_response(
+        self,
+        acc: np.ndarray,
+        dt: float,
+        omega: float,
+        ksi: float,
+    ) -> tuple[float, float, float]:
         """
-        y = self._data * self.calibration
-        return np.sqrt(np.mean(y**2))
+        Internal helper: Newmark-beta (average acceleration) SDOF response to
+        base acceleration.
+
+        Parameters
+        ----------
+        acc : np.ndarray
+            Ground acceleration time history a_g(t) (m/s^2).
+        dt : float
+            Time step (s).
+        omega : float
+            Circular frequency of the oscillator (rad/s).
+        ksi : float
+            Damping ratio.
+
+        Returns
+        -------
+        Sd : float
+            Peak relative displacement.
+        Sv : float
+            Peak relative velocity.
+        Sa : float
+            Peak absolute acceleration.
+        """
+        n = len(acc)
+        if n == 0:
+            return 0.0, 0.0, 0.0
+        m = 1.0
+        k = omega**2
+        c = 2.0 * ksi * omega
+        # Newmark average acceleration parameters
+        gamma = 0.5
+        beta = 0.25
+        u = np.zeros(n)
+        v = np.zeros(n)
+        a_rel = np.zeros(n)
+        # Initial relative acceleration from equilibrium
+        a_rel[0] = (-acc[0] - c * v[0] - k * u[0]) / m
+        a0 = 1.0 / (beta * dt**2)
+        a1 = gamma / (beta * dt)
+        a2 = 1.0 / (beta * dt)
+        a3 = 1.0 / (2.0 * beta) - 1.0
+        a4 = gamma / beta - 1.0
+        a5 = dt * (gamma / (2.0 * beta) - 1.0)
+        k_eff = k + a0 * m + a1 * c
+        p = -m * acc
+        for i in range(n - 1):
+            dp = (
+                p[i + 1]
+                - p[i]
+                + m * (a0 * u[i] + a2 * v[i] + a3 * a_rel[i])
+                + c * (a1 * u[i] + a4 * v[i] + a5 * a_rel[i])
+            )
+            du = dp / k_eff
+            u[i + 1] = u[i] + du
+            a_rel[i + 1] = a0 * (u[i + 1] - u[i]) - a2 * v[i] - a3 * a_rel[i]
+            v[i + 1] = v[i] + dt * ((1.0 - gamma) * a_rel[i] + gamma * a_rel[i + 1])
+        Sd = float(np.max(np.abs(u)))
+        Sv = float(np.max(np.abs(v)))
+        a_abs = a_rel + acc
+        Sa = float(np.max(np.abs(a_abs)))
+        return Sd, Sv, Sa
+
+    def response_spectrum(
+        self,
+        periods: np.ndarray = np.linspace(0.05, 5.0, 100),
+        ksi: float = 0.05,
+        processed: bool = True,
+        use_cache: bool = True,
+    ) -> ResponseSpectrum:
+        """
+        Compute the elastic response spectrum for a family of SDOF oscillators
+        subjected to this channel as base acceleration.
+
+        Parameters
+        ----------
+        periods : np.ndarray
+            Array of natural periods (s) for which to compute the spectrum.
+        zeta : float, optional
+            Damping ratio (e.g. 0.05 for 5% damping). Default is 0.05.
+        processed : bool, optional
+            If True (default), use the processed signal.
+            If False, use the raw data.
+        use_cache : bool, optional
+            Passed through to processed().
+
+        Returns
+        -------
+        ResponseSpectrum
+            Structured response spectrum with Sd, Sv, Sa for each period.
+        """
+        t, a = self.xy(processed=processed, use_cache=use_cache)
+        if a.size == 0:
+            raise ValueError("Cannot compute response spectrum of empty signal")
+        if self.dt is None or self.dt <= 0:
+            raise ValueError("Response spectrum requires a positive dt")
+        periods = np.asarray(periods, dtype=float)
+        if periods.ndim != 1:
+            raise ValueError("periods must be a 1D array")
+        if np.any(periods <= 0.0):
+            raise ValueError("All periods must be positive")
+        Sd = np.zeros_like(periods, dtype=float)
+        Sv = np.zeros_like(periods, dtype=float)
+        Sa = np.zeros_like(periods, dtype=float)
+        for i, T in enumerate(periods):
+            omega = 2.0 * np.pi / T
+            Sd[i], Sv[i], Sa[i] = self._sdof_newmark_response(a, self.dt, omega, ksi)
+        return ResponseSpectrum(T=periods, Sd=Sd, Sv=Sv, Sa=Sa, ksi=ksi)
+
+    # ------------------------------------------------------------------ #
+    # Plotting
+    # ------------------------------------------------------------------ #
 
     def plot(
         self,
