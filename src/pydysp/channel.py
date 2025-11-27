@@ -271,13 +271,13 @@ class ResponseSpectrum:
         match y:
             case "Sa":
                 y = self.Sa
-                ylabel = "Spectral acceleration"
+                ylabel = "Spectral acceleration [g]"
             case "Sv":
                 y = self.Sv
-                ylabel = "Spectral velocity"
+                ylabel = "Spectral velocity [m/s]"
             case "Sd":
                 y = self.Sd
-                ylabel = "Spectral displacement"
+                ylabel = "Spectral displacement [m]"
             case _:
                 raise ValueError("y must be one of 'Sa', 'Sv', 'Sd'")
         ax.plot(self.T, y, **plot_kwargs)
@@ -1102,7 +1102,7 @@ class Channel:
             Object containing frequency array `f` and PSD values `p`,
             with a `.peak()` helper.
         """
-        t, y = self.xy(processed=processed, use_cache=use_cache)
+        _, y = self.xy(processed=processed, use_cache=use_cache)
         n = len(y)
         if n == 0:
             raise ValueError("Cannot compute Welch PSD of empty signal")
@@ -1183,7 +1183,7 @@ class Channel:
         Ia = cumulative_trapezoid(coef * a_mps2**2, t, initial=0.0)
         Ia_final = float(Ia[-1])
         if Ia_final <= 0:
-            return AriasResult(t=t, Ia=Ia, t_start=float(t[0]), t_end=float(t[-1]))
+            raise ValueError("Final Arias intensity is non-positive")
         idx_start = int(np.argmax(Ia >= 0.05 * Ia_final))
         idx_end = int(np.argmax(Ia >= 0.95 * Ia_final))
         t_start = float(t[idx_start])
@@ -1302,12 +1302,12 @@ class Channel:
         ResponseSpectrum
             Structured response spectrum with Sd, Sv, Sa for each period.
         """
-        t, a = self.xy(processed=processed, use_cache=use_cache)
-        a_mps2 = g * a  # convert g to m/s^2
+        _, a = self.xy(processed=processed, use_cache=use_cache)
         if a.size == 0:
             raise ValueError("Cannot compute response spectrum of empty signal")
         if self.dt is None or self.dt <= 0:
             raise ValueError("Response spectrum requires a positive dt")
+        a_mps2 = g * a  # convert g to m/s^2
         periods = np.asarray(periods, dtype=float)
         if periods.ndim != 1:
             raise ValueError("periods must be a 1D array")
@@ -1321,7 +1321,8 @@ class Channel:
             Sd[i], Sv[i], Sa[i] = self._sdof_newmark_response(
                 a_mps2, self.dt, omega, ksi
             )
-        return ResponseSpectrum(T=periods, Sd=Sd, Sv=Sv, Sa=Sa, ksi=ksi)
+        Sa_g = Sa / g  # convert back to g
+        return ResponseSpectrum(T=periods, Sd=Sd, Sv=Sv, Sa=Sa_g, ksi=ksi)
 
     # ------------------------------------------------------------------ #
     # Plotting
