@@ -23,7 +23,6 @@ class FourierSpectrum:
     f: np.ndarray
     s: np.ndarray
 
-    # Peak helper
     def peak(self) -> tuple[float, float]:
         """
         Return the frequency and amplitude at the maximum spectral peak.
@@ -39,6 +38,39 @@ class FourierSpectrum:
             raise ValueError("Empty spectrum has no peak")
         idx = int(np.argmax(self.s))
         return float(self.f[idx]), float(self.s[idx])
+
+    def plot(
+        self,
+        ax: Optional[plt.Axes] = None,
+        fmax: Optional[float] = 50,
+        **plot_kwargs: Any,
+    ) -> plt.Axes:
+        """
+        Plot the Fourier amplitude spectrum.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on. If None, a new figure and axes are created.
+        fmax : float, optional
+            Upper x-limit for frequency axis (lower is fixed at 0).
+        **plot_kwargs
+            Extra keyword arguments forwarded to ax.plot().
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The axes with the plot.
+        """
+        if ax is None:
+            _, ax = plt.subplots()
+        ax.plot(self.f, self.s, **plot_kwargs)
+        ax.set_xlabel("Frequency [Hz]")
+        ax.set_ylabel("Fourier amplitude")
+        if fmax is not None:
+            ax.set_xlim(0.0, fmax)
+        ax.grid(True)
+        return ax
 
 
 @dataclass
@@ -57,7 +89,6 @@ class WelchSpectrum:
     f: np.ndarray
     p: np.ndarray
 
-    # Peak helper
     def peak(self) -> tuple[float, float]:
         """
         Return the frequency and PSD value at the maximum spectral peak.
@@ -74,6 +105,39 @@ class WelchSpectrum:
         idx = int(np.argmax(self.p))
         return float(self.f[idx]), float(self.p[idx])
 
+    def plot(
+        self,
+        ax: Optional[plt.Axes] = None,
+        fmax: Optional[float] = 50,
+        **plot_kwargs: Any,
+    ) -> plt.Axes:
+        """
+        Plot the Welch power spectral density.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on. If None, a new figure and axes are created.
+        fmax : float, optional
+            Upper x-limit for frequency axis (lower is fixed at 0).
+        **plot_kwargs
+            Extra keyword arguments forwarded to ax.plot().
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The axes with the plot.
+        """
+        if ax is None:
+            _, ax = plt.subplots()
+        ax.plot(self.f, self.p, **plot_kwargs)
+        ax.set_xlabel("Frequency [Hz]")
+        ax.set_ylabel("PSD")
+        if fmax is not None:
+            ax.set_xlim(0.0, fmax)
+        ax.grid(True)
+        return ax
+
 
 @dataclass
 class AriasResult:
@@ -86,20 +150,50 @@ class AriasResult:
         Time array.
     Ia : np.ndarray
         Arias intensity time history.
-    Ia_final : float
-        Final Arias intensity value.
-    duration : float
-        Significant duration between 5% and 95% of Ia_final.
-    idx_start : int
-        Index corresponding to the 5% point.
-    idx_end : int
-        Index corresponding to the 95% point.
+    t_start: float
+        Time corresponding to the 5% point.
+    t_end: float
+        Time corresponding to the 95% point.
     """
 
     t: np.ndarray
     Ia: np.ndarray
     t_start: float
     t_end: float
+
+    def plot(
+        self,
+        ax: Optional[plt.Axes] = None,
+        show_window: bool = True,
+        **plot_kwargs: Any,
+    ) -> plt.Axes:
+        """
+        Plot the Arias intensity time history (Husid plot).
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on. If None, a new figure and axes are created.
+        show_window : bool, optional
+            If True, draw vertical lines at t_start and t_end.
+        **plot_kwargs
+            Extra keyword arguments forwarded to ax.plot().
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The axes with the plot.
+        """
+        if ax is None:
+            _, ax = plt.subplots()
+        ax.plot(self.t, self.Ia, **plot_kwargs)
+        ax.set_xlabel("Time [s]")
+        ax.set_ylabel("Arias intensity")
+        if show_window:
+            ax.axvline(self.t_start, linestyle="--", c="gray")
+            ax.axvline(self.t_end, linestyle="--", c="gray")
+        ax.grid(True)
+        return ax
 
 
 @dataclass
@@ -142,6 +236,59 @@ class ResponseSpectrum:
             raise ValueError("Empty response spectrum has no peak")
         idx = int(np.argmax(self.Sa))
         return float(self.T[idx]), float(self.Sa[idx])
+
+    def plot(
+        self,
+        ax: Optional[plt.Axes] = None,
+        y: str = "Sa",
+        logx: bool = False,
+        logy: bool = False,
+        **plot_kwargs: Any,
+    ) -> plt.Axes:
+        """
+        Plot the response spectrum.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on. If None, a new figure and axes are created.
+        y : {'Sa', 'Sv', 'Sd'}, optional
+            Which spectrum to plot: Sa (default), Sv, or Sd.
+        logx : bool, optional
+            Use logarithmic x-axis if True.
+        logy : bool, optional
+            Use logarithmic y-axis if True.
+        **plot_kwargs
+            Extra keyword arguments forwarded to ``ax.plot``.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The axes with the plot.
+        """
+        if ax is None:
+            _, ax = plt.subplots()
+        match y:
+            case "Sa":
+                y = self.Sa
+                ylabel = "Spectral acceleration"
+            case "Sv":
+                y = self.Sv
+                ylabel = "Spectral velocity"
+            case "Sd":
+                y = self.Sd
+                ylabel = "Spectral displacement"
+            case _:
+                raise ValueError("y must be one of 'Sa', 'Sv', 'Sd'")
+        ax.plot(self.T, y, **plot_kwargs)
+        ax.set_xlabel("Period [s]")
+        ax.set_ylabel(ylabel)
+        if logx:
+            ax.set_xscale("log")
+        if logy:
+            ax.set_yscale("log")
+        ax.grid(True, which="both")
+        return ax
 
 
 @dataclass
@@ -259,7 +406,8 @@ class Channel:
             self.label_legend = self.name_user
         if self.label_axis is None and self.units is not None:
             base = self.label_legend or self.name_user or ""
-            self.label_axis = f"{base} ({self.units})" if base else f"({self.units})"
+            units = f"[{self.units}]" or ""
+            self.label_axis = f"{base} {units}".strip()
 
     # ------------------------------------------------------------------ #
     # Internal cache management
@@ -442,6 +590,184 @@ class Channel:
             f"Trim params set: {t_start}–{t_end} s",
         ]
         return new
+
+    # ------------------------------------------------------------------ #
+    # Trimmers
+    # ------------------------------------------------------------------ #
+
+    def trim_by_threshold(
+        self,
+        threshold: float = 0.01,
+        use_abs: bool = True,
+        buffer_before: float = 0.0,
+        buffer_after: float = 0.0,
+        processed: bool = True,
+        use_cache: bool = True,
+    ) -> "Channel":
+        """
+        Return a new Channel trimmed to where the signal exceeds a threshold.
+
+        This is the classic 'bracketed duration' style trimming. The window is
+        defined from the first to the last sample where the signal exceeds the
+        threshold, optionally in absolute value, with optional time buffers.
+
+        Parameters
+        ----------
+        threshold : float
+            Amplitude threshold in signal units (e.g. 0.01 if data is in g).
+        use_abs : bool, optional
+            If True (default), use |y| >= threshold. If False, use y >= threshold.
+        buffer_before : float, optional
+            Extra time (s) added before the first exceedance. Default 0.0.
+        buffer_after : float, optional
+            Extra time (s) added after the last exceedance. Default 0.0.
+        processed : bool, optional
+            If True (default), use the processed signal.
+        use_cache : bool, optional
+            Passed through to processed().
+
+        Returns
+        -------
+        Channel
+            New Channel with updated trim_params.
+        """
+        t, y = self.xy(processed=processed, use_cache=use_cache)
+        if y.size == 0:
+            raise ValueError("Cannot trim empty signal")
+        if use_abs:
+            mask = np.abs(y) >= threshold
+        else:
+            mask = y >= threshold
+        if not np.any(mask):
+            raise ValueError("No samples exceed the specified threshold")
+        i_start = int(np.argmax(mask))
+        i_end = int(len(mask) - 1 - np.argmax(mask[::-1]))
+        t_start = float(t[i_start]) - buffer_before
+        t_end = float(t[i_end]) + buffer_after
+        # Clamp to original time range
+        t_start = max(t_start, float(t[0]))
+        t_end = min(t_end, float(t[-1]))
+        if t_end <= t_start:
+            raise ValueError("Computed trim window is empty after buffering")
+        return self.trimmed(t_start=t_start, t_end=t_end)
+
+    def trim_by_fraction_of_peak(
+        self,
+        fraction: float = 0.05,
+        *,
+        use_abs: bool = True,
+        buffer_before: float = 0.0,
+        buffer_after: float = 0.0,
+        processed: bool = True,
+        use_cache: bool = True,
+    ) -> "Channel":
+        """
+        Return a new Channel trimmed to where the signal is above a fraction
+        of its peak amplitude.
+
+        Parameters
+        ----------
+        fraction : float
+            Fraction of the peak amplitude in (0, 1], e.g. 0.05 for 5% of peak.
+        use_abs : bool, optional
+            If True (default), peak and threshold are based on |y|.
+            If False, peak and threshold are based on y (positive peaks only).
+        buffer_before : float, optional
+            Extra time (s) added before the first exceedance. Default 0.0.
+        buffer_after : float, optional
+            Extra time (s) added after the last exceedance. Default 0.0.
+        processed : bool, optional
+            If True (default), use the processed signal.
+        use_cache : bool, optional
+            Passed through to processed().
+
+        Returns
+        -------
+        Channel
+            New Channel with updated trim_params.
+        """
+        if not (0.0 < fraction <= 1.0):
+            raise ValueError("fraction must be in (0, 1]")
+        _, y = self.xy(processed=processed, use_cache=use_cache)
+        if y.size == 0:
+            raise ValueError("Cannot trim empty signal")
+        if use_abs:
+            peak = float(np.max(np.abs(y)))
+        else:
+            peak = float(np.max(y))
+        if peak <= 0.0:
+            raise ValueError(
+                "Signal peak is non-positive; cannot define threshold from peak"
+            )
+        threshold = fraction * peak
+        return self.trim_by_threshold(
+            threshold=threshold,
+            use_abs=use_abs,
+            buffer_before=buffer_before,
+            buffer_after=buffer_after,
+            processed=processed,
+            use_cache=use_cache,
+        )
+
+    def trim_by_arias(
+        self,
+        lower: float = 0.05,
+        upper: float = 0.95,
+        g: float = 9.81,
+        buffer_before: float = 0.0,
+        buffer_after: float = 0.0,
+        processed: bool = True,
+        use_cache: bool = True,
+    ) -> "Channel":
+        """
+        Return a new Channel trimmed to the Arias-intensity-based significant
+        duration window.
+
+        By default this uses the classic 5%–95% Arias intensity window.
+
+        Parameters
+        ----------
+        lower : float, optional
+            Lower fraction of final Arias intensity, in [0, 1). Default 0.05.
+        upper : float, optional
+            Upper fraction of final Arias intensity, in (0, 1]. Default 0.95.
+        g : float, optional
+            Acceleration due to gravity (m/s^2). Default 9.81.
+        buffer_before : float, optional
+            Extra time (s) added before the lower Arias crossing. Default 0.0.
+        buffer_after : float, optional
+            Extra time (s) added after the upper Arias crossing. Default 0.0.
+        processed : bool, optional
+            If True (default), use the processed signal.
+        use_cache : bool, optional
+            Passed through to processed().
+
+        Returns
+        -------
+        Channel
+            New Channel with updated trim_params.
+        """
+        if not (0.0 <= lower < upper <= 1.0):
+            raise ValueError("Require 0 <= lower < upper <= 1")
+        res = self.arias_intensity(g=g, processed=processed, use_cache=use_cache)
+        t = res.t
+        Ia = res.Ia
+        if Ia.size == 0:
+            raise ValueError("Cannot trim by Arias intensity for empty signal")
+        Ia_final = float(Ia[-1])
+        if Ia_final <= 0.0:
+            raise ValueError("Final Arias intensity is non-positive")
+        # Find indices where cumulative Arias crosses the requested fractions
+        idx_lower = int(np.argmax(Ia >= lower * Ia_final))
+        idx_upper = int(np.argmax(Ia >= upper * Ia_final))
+        t_lower = float(t[idx_lower]) - buffer_before
+        t_upper = float(t[idx_upper]) + buffer_after
+        # Clamp to original time range
+        t_lower = max(t_lower, float(t[0]))
+        t_upper = min(t_upper, float(t[-1]))
+        if t_upper <= t_lower:
+            raise ValueError("Computed Arias trim window is empty after buffering")
+        return self.trimmed(t_start=t_lower, t_end=t_upper)
 
     # ------------------------------------------------------------------ #
     # Processed
@@ -905,8 +1231,8 @@ class Channel:
         if n == 0:
             return 0.0, 0.0, 0.0
         m = 1.0
-        k = omega**2
-        c = 2.0 * ksi * omega
+        k = m * omega**2
+        c = 2.0 * ksi * omega * m
         # Newmark average acceleration parameters
         gamma = 0.5
         beta = 0.25
@@ -955,7 +1281,7 @@ class Channel:
         ----------
         periods : np.ndarray
             Array of natural periods (s) for which to compute the spectrum.
-        zeta : float, optional
+        ksi : float, optional
             Damping ratio (e.g. 0.05 for 5% damping). Default is 0.05.
         processed : bool, optional
             If True (default), use the processed signal.
@@ -992,62 +1318,54 @@ class Channel:
 
     def plot(
         self,
-        plot_type: str = "Timehistory",
-        name: bool = True,
-        description: bool = False,
-        typey: bool = True,
-        axis=None,
-        **kwargs,
+        ax: Optional[plt.Axes] = None,
+        processed: bool = True,
+        use_cache: bool = True,
+        include_label: bool = True,
+        include_kind: bool = False,
+        include_legend: bool = False,
+        **plot_kwargs: Any,
     ) -> plt.Axes:
         """
-        Plots the specified type of data.
+        Plot the time history of this channel.
 
-        Parameters:
-            plot_type (str): Type of plot ('Timehistory', 'Fourier', 'Power', 'Arias').
-            name (bool): If True, includes the channel name in the ylabel.
-            description (bool): If True, includes the channel description in the ylabel.
-            typey (bool): If True, includes the plot type in the ylabel.
-            axis: Matplotlib axis to plot on. If None, creates a new axis.
-            **kwargs**: Additional keyword arguments for the plot.
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Existing axes to plot on. If None, a new figure and axes are created.
+        processed : bool, optional
+            If True (default), plot the processed view. If False, plot raw data.
+        use_cache : bool, optional
+            Passed through to processed().
+        include_label : bool, optional
+            If True (default), use the channel's label_axis for the y-axis label.
+        include_kind : bool, optional
+            If True, include the channel's quantity for the y-axis label.
+            This overrides include_label if both are True.
+        include_legend : bool, optional
+            If True, use the channel's label_legend for the legend.
+        **plot_kwargs
+            Extra keyword arguments forwarded to ``ax.plot``.
 
-        Returns:
-            plt.Axes: The axis with the plotted data.
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The axes with the plot.
         """
-        if axis is None:
-            _, axis = plt.subplots()
-        freq_plot = False
-        match plot_type:
-            case "Timehistory":
-                [x, y] = self.timehistory()[0]
-                xlabel = "Time (sec)"
-                ytype = "Timehistory (" + self.unit + ")"
-            case "Fourier":
-                [x, y] = self.fourier()[0]
-                xlabel = "Frequency (Hz)"
-                ytype = "Fourier Amplitude"
-                freq_plot = True
-            case "Power":
-                [x, y] = self.welch(**kwargs)[0]
-                xlabel = "Frequency (Hz)"
-                ytype = "Power Spectral Density"
-                freq_plot = True
-            case "Arias":
-                [x, y] = self.arias()[0]
-                xlabel = "Time (sec)"
-                ytype = "Arias Intensity (m/s)"
-            case _:
-                raise ValueError(f"Unknown plot_type: {plot_type}")
-        if freq_plot:
-            axis.set_xlim(0, kwargs.get("xlim", 50))
-        axis.plot(x, y)
-        ylabel = ""
-        if name:
-            ylabel += self.name
-        if description:
-            ylabel += " " + self.description
-        if typey:
-            ylabel += " " + ytype
-        axis.set_xlabel(xlabel)
-        axis.set_ylabel(ylabel)
-        axis.grid()
-        return axis
+        if ax is None:
+            _, ax = plt.subplots()
+        t, y = self.xy(processed=processed, use_cache=use_cache)
+        line_label = self.label_legend or self.name_user or self.name_input
+        ax.plot(t, y, label=line_label, **plot_kwargs)
+        ax.set_xlabel("Time [s]")
+        if include_label and self.label_axis:
+            ylabel = self.label_axis
+        if include_kind and self.quantity:
+            ylabel = self.quantity.capitalize() + (
+                f" [{self.units}]" if self.units else ""
+            )
+        ax.set_ylabel(ylabel)
+        if include_legend and line_label:
+            ax.legend()
+        ax.grid(True)
+        return ax
