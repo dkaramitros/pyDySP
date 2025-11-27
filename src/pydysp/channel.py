@@ -1,218 +1,287 @@
+from dataclasses import dataclass, field, replace
+from typing import Optional, Iterable, Dict, Any
+
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import Literal
 from scipy.signal import detrend, butter, filtfilt, welch
 from scipy.integrate import cumulative_trapezoid
 
 
+@dataclass
 class Channel:
+    """
+    Represents a single experimental time-history channel.
 
-    def __init__(self):
+    Features
+    --------
+    - Stores a 1D signal (`data`) and its time axis (`time`, or `dt` and `t0`).
+    - Keeps naming information for plotting and reports, as well as flexible tags and free-form metadata.
+    - Maintains processing parameters (e.g. for trimming and filtering) without modifying the raw data.
+    """
+
+    # 1D numeric signal values
+    data: np.ndarray
+    # Sampling interval in seconds (used if explicit `time` is not provided)
+    dt: Optional[float] = None
+    # Start time in seconds (used when constructing `time` from `dt`)
+    t0: float = 0.0
+    # Explicit time array (same length/shape as `data`, if provided)
+    time: Optional[np.ndarray] = None
+
+    # Original name as found in the input file
+    name_input: Optional[str] = None
+    # Your preferred short name, e.g. "Acc1"
+    name_user: Optional[str] = None
+    # Axis label for plotting, e.g. "Acc1: Footing (g)"
+    label_axis: Optional[str] = None
+    # Legend label for plotting, e.g. "Acc1: Footing"
+    label_legend: Optional[str] = None
+    # Longer human-readable description of the channel, e.g. "Acceleration at footing level"
+    description_long: Optional[str] = None
+    # Physical quantity type, e.g. "displacement", "force", "acceleration"
+    quantity: Optional[str] = None
+    # Engineering units, e.g. "m", "kN", "g"
+    units: Optional[str] = None
+    # Raw DAQ units, e.g. "V"
+    raw_units: Optional[str] = None
+    # Multiplicative factor to convert raw data to physical units (e.g. g/V)
+    calibration_factor: float = 1.0
+
+    # Trimming window in seconds as (t_start, t_end); data itself is not auto-trimmed
+    trim: Optional[tuple[float, float]] = None
+    # Filtering parameters, e.g. { "type": "butter", "order": 2, "fc": 50.0 }
+    filter_params: Dict[str, Any] = field(default_factory=dict)
+    # Baseline correction parameters, e.g. { "type": "linear" }
+    baseline_params: Dict[str, Any] = field(default_factory=dict)
+    # Free-form notes about processing steps (trimming, filtering, calibration, etc.)
+    processing_notes: list[str] = field(default_factory=list)
+
+    # Tags used for grouping
+    tags: set[str] = field(default_factory=set)
+    # Free-form metadata, e.g. sensor type
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
         """
-        Initializes the Channel instance with default values.
+        Normalise arrays, infer missing timing info, and set sensible defaults
+        for names / labels / tags after dataclass initialisation.
         """
-        self.set_channel_info(
-            name="Undefined channel",
-            description="No channel description",
-            unit="Undefined unit",
-            calibration=1,
-        )
-        self.set_channel_data(raw_time=np.zeros(2), raw_data=np.zeros(2))
+        # Ensure data is a 1D NumPy array
+        self.data = np.asarray(self.data)
+        if self.data.ndim != 1:
+            raise ValueError("Channel.data must be a 1D array (single time history)")
+        # Handle time / dt relationship
+        if self.time is not None:
+            self.time = np.asarray(self.time)
+            if self.time.shape != self.data.shape:
+                raise ValueError("Time and data must have the same shape")
+            if self.dt is None and len(self.time) > 1:
+                self.dt = float(self.time[1] - self.time[0])
+            if self.t0 == 0.0 and len(self.time) > 0:
+                self.t0 = float(self.time[0])
+        else:
+            if self.dt is None:
+                raise ValueError("Either 'time' or 'dt' must be provided")
+            n = self.data.shape[0]
+            self.time = self.t0 + self.dt * np.arange(n)
+        # Auto-add tags
+        if self.quantity is not None:
+            self.tags.add(f"q:{self.quantity}")
+        # Sensible fallbacks for names and labels
+        if self.name_user is None and self.name_input is not None:
+            self.name_user = self.name_input
+        if self.label_legend is None and self.name_user is not None:
+            self.label_legend = self.name_user
+        if self.label_axis is None and self.units is not None:
+            base = self.label_legend or self.name_user or ""
+            self.label_axis = f"{base} ({self.units})" if base else f"({self.units})"
 
-    def set_channel_info(
-        self,
-        name: str = None,
-        description: str = None,
-        unit: str = None,
-        calibration: float = None,
-        factor_type: Literal["V_u", "u_V"] = "u_V",
-    ) -> None:
+    def info(self) -> str:
         """
-        Sets the channel information.
-
-        Parameters:
-            name (str): Name of the channel.
-            description (str): Description of the channel.
-            unit (str): Unit of measurement for the data.
-            calibration (float): Calibration factor for the data.
-            factor_type (Literal["V_u","u_V"]): Volts per unit or units per Volt.
+        Return a clean, human-readable summary of channel metadata.
         """
-        if name is not None:
-            self.name = name
-        if description is not None:
-            self.description = description
-        if unit is not None:
-            self.unit = unit
-        if calibration is not None:
-            if factor_type == "V_u" and calibration != 0:
-                self.calibration = 1 / calibration
-            else:
-                self.calibration = calibration
+        lines = []
+        # Header
+        title = self.name_user or self.name_input or "(unnamed channel)"
+        lines.append(f"Channel: {title}")
+        lines.append("-" * (len(title) + 9))
+        # Basic signal info
+        lines.append(f"Length: {len(self.data)} samples")
+        lines.append(f"Sampling frequency: fs = {1.0 / self.dt:g} Hz")
+        lines.append(f"Timestep: dt = {self.dt:g} s")
+        lines.append(f"Start time: t0 = {self.t0} s")
+        # Physical meaning & calibration
+        if any([self.quantity, self.units, self.raw_units, self.calibration_factor]):
+            lines.append("\nPhysical meaning & calibration:")
+            if self.quantity:
+                lines.append(f"  Quantity: {self.quantity}")
+            if self.units:
+                lines.append(f"  Units: {self.units}")
+            if self.raw_units:
+                lines.append(f"  Raw units: {self.raw_units}")
+            if self.calibration_factor:
+                lines.append(
+                    f"  Calibration factor: {self.calibration_factor}"
+                    + f" {self.units or 'units'}/{self.raw_units or 'raw'}"
+                )
+        # Naming / labels
+        if any(
+            [
+                self.name_input,
+                self.name_user,
+                self.label_legend,
+                self.label_axis,
+                self.description_long,
+            ]
+        ):
+            lines.append("\nNaming / labels:")
+            if self.name_input:
+                lines.append(f"  Input name: {self.name_input}")
+            if self.name_user:
+                lines.append(f"  User name: {self.name_user}")
+            if self.label_legend:
+                lines.append(f"  Legend label: {self.label_legend}")
+            if self.label_axis:
+                lines.append(f"  Axis label: {self.label_axis}")
+            if self.description_long:
+                lines.append(f"  Description: {self.description_long}")
+        # Tags
+        if self.tags:
+            lines.append("\nTags:")
+            taglist = "\n  ".join(sorted(self.tags))
+            lines.append(f"  {taglist}")
+        # Processing
+        if self.trim or self.filter_params or self.processing_notes:
+            lines.append("\nProcessing:")
+            if self.trim is not None:
+                lines.append(f"  Trim window: {self.trim[0]} – {self.trim[1]} s")
+            if self.filter_params:
+                lines.append(f"  Filter params: {self.filter_params}")
+            if self.processing_notes:
+                lines.append("  Notes:")
+                for note in self.processing_notes:
+                    lines.append(f"    - {note}")
+        # Free-form metadata
+        if self.meta:
+            lines.append("\nMetadata:")
+            for k, v in self.meta.items():
+                lines.append(f"  {k}: {v}")
+        return "\n".join(lines)
 
-    def set_channel_data(self, raw_time: np.ndarray, raw_data: np.ndarray) -> None:
+    def drift_corrected(self, points: int = 50) -> "Channel":
         """
-        Sets the raw time and data for the channel.
+        Return a new Channel with simple drift removed, by subtracting the mean of
+        the first points samples from the raw data.
 
-        Parameters:
-            raw_time (np.ndarray): Array of time values.
-            raw_data (np.ndarray): Array of data values.
-
-        Raises:
-            ValueError: If raw_time and raw_data have different shapes or contain less than two elements.
+        Parameters
+        ----------
+        points : int, optional
+            Number of initial samples used to estimate the drift (default 50).
         """
-        if raw_time.shape != raw_data.shape:
-            raise ValueError("raw_time and raw_data must have the same shape")
-        if len(raw_time) < 2:
-            raise ValueError("raw_time and raw_data must contain at least two elements")
-        self._raw_time = raw_time
-        self._raw_data = raw_data
-        self._raw_points = np.size(self._raw_data)
-        self._raw_timestep = self._raw_time[1] - self._raw_time[0]
-        self._time = raw_time
-        self._data = raw_data
-        self._points = np.size(self._time)
-        self._timestep = self._time[1] - self._time[0]
-
-    def get_channel_info(self, print_info: bool = True):
-        """
-        Get the channel information and optionally print it.
-
-        Parameters:
-            print_info (bool): If True, print the channel information. Default is True.
-
-        Returns:
-            list: A list containing the channel information.
-        """
-        info = [
-            self.name,
-            self.description,
-            self.unit,
-            self.calibration,
-            self._timestep,
-            self._points,
+        # Validate input
+        if points > len(self.data):
+            raise ValueError(
+                "Number of points for drift correction exceeds data length"
+            )
+        # Apply drift correction
+        drift_value = float(np.mean(self.data[:points]))
+        new_data = self.data - drift_value
+        # Clone channel with updated data
+        new = replace(self, data=new_data)
+        new.tags = set(self.tags).union({"drift_corrected"})
+        new.processing_notes = [
+            *self.processing_notes,
+            f"Drift correction: subtracted mean of first {points} points",
         ]
-        if print_info:
-            print(f"Name: {info[0]}")
-            print(f"Description: {info[1]}")
-            print(f"Unit: {info[2]}")
-            print(f"Calibration: {info[3]}")
-            print(f"Timestep: {info[4]}")
-            print(f"Points: {info[5]}")
-        return info
+        return new
 
-    def get_raw_data(self) -> tuple:
+    def baseline_corrected(self, **override: Any) -> "Channel":
         """
-        Returns the raw data of the channel.
+        Return a new Channel with baseline (trend) removed using scipy.signal.detrend.
 
-        Returns:
-            tuple: A tuple containing raw time, raw data, raw points, and raw timestep.
+        Parameters are taken from baseline_params, optionally overridden here.
         """
-        return self._raw_time, self._raw_data, self._raw_points, self._raw_timestep
+        # Merge stored parameters with overrides
+        params: Dict[str, Any] = {**self.baseline_params, **override}
+        # Apply detrending to raw data
+        new_data = detrend(self.data, **params)
+        # Clone channel with updated data
+        new = replace(self, data=new_data)
+        new.tags = set(self.tags).union({"baseline_corrected"})
+        arg_str = ", ".join(f"{k}={v}" for k, v in params.items()) or ""
+        new.processing_notes = [
+            *self.processing_notes,
+            f"Baseline correction: detrend({arg_str})",
+        ]
+        return new
 
-    def get_data(self) -> tuple:
+    def filtered(self, **override: Any) -> "Channel":
         """
-        Returns the current (possibly processed) data of the channel.
+        Return a new Channel with a Butterworth filter applied using scipy.signal.butter.
 
-        Returns:
-            tuple: A tuple containing current time, data, points, and timestep.
+        Parameters are taken from filter_params, optionally overridden here.
+
+        Defaults: {"btype": "lowpass", "fc": 50.0, "order": 2}
         """
-        return self._time, self._data, self._points, self._timestep
+        # Merge stored parameters with overrides
+        params = {**self.filter_params, **override}
+        btype = params.get("btype", "lowpass")
+        fc = params.get("fc", 50.0)
+        order = params.get("order", 2)
+        fs = 1.0 / self.dt
+        if btype in ("lowpass", "highpass"):
+            Wn = 2 * fc / fs
+        elif btype in ("bandpass", "bandstop"):
+            f1 = params.get("f1")
+            f2 = params.get("f2")
+            if f1 is None or f2 is None:
+                raise ValueError("Band filters require f1 and f2")
+            Wn = [2 * f1 / fs, 2 * f2 / fs]
+        else:
+            raise ValueError(f"Unsupported filter mode: {btype!r}")
+        # Design and apply filter
+        b, a = butter(order, Wn, btype=btype)
+        new_data = filtfilt(b, a, self.data)
+        # Clone channel with new filtered data
+        new = replace(self, data=new_data)
+        new.tags = set(self.tags).union({f"filtered_{btype}"})
+        new.processing_notes = [
+            *self.processing_notes,
+            f"Filter: Butterworth {btype}, order={order}, fc={fc} Hz, fs={fs:g} Hz",
+        ]
+        return new
 
-    def reset_raw_data(self) -> None:
+    def trimmed(self, t_start: float, t_end: float) -> "Channel":
         """
-        Resets the processed data to the raw data.
+        Return a new Channel trimmed to the time window [t_start, t_end].
+
+        Parameters
+        ----------
+        t_start : float
+            Start time of the trim window (seconds).
+        t_end : float
+            End time of the trim window (seconds).
         """
-        self._time = self._raw_time
-        self._data = self._raw_data
-        self._points = self._raw_points
-        self._timestep = self._raw_timestep
-
-    def drift_correct(self, points: int = 50) -> None:
-        """
-        Removes drift from the raw data using the average of the first few points.
-
-        Parameters:
-            points (int): Number of points to average.
-        """
-        drift = np.mean(self._raw_data[:points])
-        self._data = self._raw_data - drift
-
-    def baseline_correct(self, **kwargs) -> None:
-        """
-        Removes the linear trend from the raw data using scipy.signal.detrend.
-
-        Parameters:
-            **kwargs**: Additional keyword arguments to pass to scipy.signal.detrend.
-        """
-        self._data = detrend(self._raw_data, **kwargs)
-
-    def filter(self, order: int = 2, cutoff: float = 50) -> None:
-        """
-        Applies a low-pass Butterworth filter to the data.
-
-        Parameters:
-            order (int): The order of the filter.
-            cutoff (float): The cutoff frequency of the filter.
-        """
-        b, a = butter(N=order, Wn=cutoff, btype="low", fs=1 / self._timestep)
-        self._data = filtfilt(b, a, self._data)
-
-    def trim(
-        self,
-        buffer: int = 100,
-        time_shift: bool = True,
-        trim_method: str = "Threshold",
-        start: int = 0,
-        end: int = 0,
-        threshold_ratio: float = 0.05,
-        threshold_acc: float = 0.01,
-    ) -> list[int]:
-        """
-        Trims the data based on the specified method.
-
-        Parameters:
-            buffer (int): Number of points to include as buffer around the trimmed data.
-            time_shift (bool): If True, shifts the time axis to start at zero.
-            trim_method (str): Method to use for trimming ('Points', 'Threshold', 'Arias').
-            start (int): Starting index for 'Points' method.
-            end (int): Ending index for 'Points' method.
-            threshold_ratio (float): Ratio threshold for 'Threshold' method.
-            threshold_acc (float): Acceleration threshold for 'Threshold' method.
-
-        Returns:
-            list: The start and end indices used for trimming.
-
-        Raises:
-            ValueError: If an unknown trim_method is specified.
-        """
-        if self._points < self._raw_points:
-            self.reset_raw_data()
-        match trim_method:
-            case "Points":
-                pass
-            case "Threshold":
-                threshold = min(
-                    [
-                        threshold_ratio * np.amax(np.abs(self._data)),
-                        threshold_acc * self.calibration,
-                    ]
-                )
-                start = np.argmax(np.abs(self._data) > threshold)
-                end = np.size(self._data) - np.argmax(
-                    np.abs(np.flip(self._data)) > threshold
-                )
-            case "Arias":
-                [start, end] = self.arias()[3]
-            case _:
-                raise ValueError(f"Unknown trim_method: {trim_method}")
-        start = max([start - buffer, 0])
-        end = min([end + buffer, np.size(self._time)])
-        self._time = self._time[start:end]
-        self._data = self._data[start:end]
-        self._points = np.size(self._time)
-        if time_shift:
-            self._time -= self._time[0]
-        return [start, end]
+        if t_start is None or t_end is None:
+            if self.trim is None:
+                raise ValueError("No trim window provided")
+            t_start, t_end = self.trim
+        if t_end <= t_start:
+            raise ValueError("t_end must be greater than t_start")
+        mask = (self.time >= t_start) & (self.time <= t_end)
+        if not np.any(mask):
+            raise ValueError("Trim window does not overlap channel time range")
+        # Apply trimming mask
+        new_time = self.time[mask]
+        new_data = self.data[mask]
+        # Clone channel with new trimmed data
+        new = replace(self, data=new_data, time=new_time)
+        new.tags = set(self.tags).union({"trimmed"})
+        new.processing_notes = [
+            *self.processing_notes,
+            f"Trimmed: from {t_start} to {t_end} s",
+        ]
+        return new
 
     def timehistory(self) -> tuple[np.ndarray, list[float]]:
         """
