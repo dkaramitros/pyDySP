@@ -152,7 +152,7 @@ class Channel:
         """
         lines = []
         # Header
-        title = self.name_user or self.name_input or "(unnamed channel)"
+        title = self.name_user or self.name_input or "<unnamed>"
         lines.append(f"Channel: {title}")
         lines.append("-" * (len(title) + 9))
         # Basic signal info
