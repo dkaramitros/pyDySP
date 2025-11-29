@@ -1,10 +1,12 @@
 # pyDySP — Dynamic Signal Processing for Experimental Data
 
-![License](https://img.shields.io/github/license/dkaramitros/pyDySP)
-[![Read the Docs](https://img.shields.io/readthedocs/pydysp)](https://pydysp.readthedocs.io/en/latest/)
-[![PyPI - Version](https://img.shields.io/pypi/v/pydysp)](https://pypi.org/project/pyDySP/)
-![PyPI - Status](https://img.shields.io/pypi/status/pydysp)
+[![Tests](https://github.com/dkaramitros/pyDySP/actions/workflows/tests.yml/badge.svg)](https://github.com/dkaramitros/pyDySP/actions/workflows/tests.yml)
+[![Docs](https://img.shields.io/readthedocs/pydysp)](https://pydysp.readthedocs.io/en/latest/)
+[![PyPI](https://img.shields.io/pypi/v/pydysp)](https://pypi.org/project/pyDySP/)
+![Status](https://img.shields.io/pypi/status/pydysp)
 ![Maintenance](https://img.shields.io/maintenance/active/2025)
+![License](https://img.shields.io/github/license/dkaramitros/pyDySP)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/dkaramitros/pyDySP/HEAD?labpath=demo%2Fdemo.ipynb)
 
 **pyDySP** is a lightweight Python library for **dynamic signal processing** of experimental data, developed at  
 *the Shaking Table and SoFSI Laboratories — University of Bristol*.
