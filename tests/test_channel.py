@@ -59,6 +59,29 @@ def test_channel_info_contains_basic_fields():
     assert "Quantity:" in info or "Units:" in info
 
 
+def test_channel_duration_computes_correctly():
+    import numpy as np
+    from pydysp.channel import Channel
+    import pytest
+
+    dt = 0.01
+    t = np.arange(0, 5, dt)
+    y = np.sin(2 * np.pi * t)
+
+    ch = Channel(data=y, dt=dt)
+
+    expected_duration = t[-1] - t[0]  # same definition used in Test.duration
+    assert ch.duration == pytest.approx(expected_duration)
+
+
+def test_channel_duration_empty_signal():
+    import numpy as np
+    from pydysp.channel import Channel
+
+    ch = Channel(data=np.array([]), dt=0.01)
+    assert ch.duration == 0.0
+
+
 # ----------------------------------------------------------------------
 # Processing steps
 # ----------------------------------------------------------------------

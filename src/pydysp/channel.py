@@ -12,7 +12,7 @@ from .arias import AriasResult
 from .response import ResponseSpectrum, sdof_newmark_response
 
 
-@dataclass
+@dataclass(eq=False)
 class Channel:
     """Single time-history channel with metadata and processing parameters.
 
@@ -145,6 +145,20 @@ class Channel:
             base = self.label_legend or self.name_user or ""
             units = f"[{self.units}]"
             self.label_axis = f"{base} {units}".strip()
+
+    # ------------------------------------------------------------------ #
+    # Convenience properties
+    # ------------------------------------------------------------------ #
+
+    @property
+    def duration(self) -> float:
+        """
+        Total duration of the channel in seconds, based on the time vector.
+        """
+        if self.data.size == 0:
+            return 0.0
+        t = self.time
+        return float(t[-1] - t[0])
 
     # ------------------------------------------------------------------ #
     # Internal cache management

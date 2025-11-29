@@ -985,7 +985,7 @@ class Test:
             raise ValueError("No channels selected for drift correction.")
         new_channels: list[Channel] = []
         for ch in self.channels:
-            if ch in selected:
+            if any(ch is s for s in selected):
                 new_channels.append(ch.drift_corrected(**override))
             else:
                 new_channels.append(ch)
@@ -1031,7 +1031,7 @@ class Test:
             raise ValueError("No channels selected for filtering.")
         new_channels: list[Channel] = []
         for ch in self.channels:
-            if ch in selected:
+            if any(ch is s for s in selected):
                 new_channels.append(ch.filtered(**override))
             else:
                 new_channels.append(ch)
@@ -1076,7 +1076,7 @@ class Test:
             raise ValueError("No channels selected for baseline correction.")
         new_channels: list[Channel] = []
         for ch in self.channels:
-            if ch in selected:
+            if any(ch is s for s in selected):
                 new_channels.append(ch.baseline_corrected(**override))
             else:
                 new_channels.append(ch)
@@ -1485,13 +1485,13 @@ class Test:
             Complex cross-spectrum ``Pxy(f)``.
         """
         if isinstance(x, Channel):
-            if x not in self.channels:
+            if not any(x is s for s in self.channels):
                 raise ValueError("Input Channel is not part of this Test.")
             ch_x = x
         else:
             ch_x = self[x]
         if isinstance(y, Channel):
-            if y not in self.channels:
+            if not any(y is s for s in self.channels):
                 raise ValueError("Output Channel is not part of this Test.")
             ch_y = y
         else:
@@ -1564,13 +1564,13 @@ class Test:
             Complex transfer function values ``H(f)``.
         """
         if isinstance(x, Channel):
-            if x not in self.channels:
+            if not any(x is s for s in self.channels):
                 raise ValueError("Input Channel is not part of this Test.")
             ch_x = x
         else:
             ch_x = self[x]
         if isinstance(y, Channel):
-            if y not in self.channels:
+            if not any(y is s for s in self.channels):
                 raise ValueError("Output Channel is not part of this Test.")
             ch_y = y
         else:
@@ -1641,13 +1641,13 @@ class Test:
             Estimated time delay in seconds (positive if ``y`` lags ``x``).
         """
         if isinstance(x, Channel):
-            if x not in self.channels:
+            if not any(x is s for s in self.channels):
                 raise ValueError("Input Channel is not part of this Test.")
             ch_x = x
         else:
             ch_x = self[x]
         if isinstance(y, Channel):
-            if y not in self.channels:
+            if not any(y is s for s in self.channels):
                 raise ValueError("Output Channel is not part of this Test.")
             ch_y = y
         else:
@@ -1932,6 +1932,7 @@ class Test:
             sharex=sharex,
             sharey=sharey,
             squeeze=False,
+            layout="tight",
         )
         all_channels: list[Channel] = []
         for i_row, row in enumerate(normalized):

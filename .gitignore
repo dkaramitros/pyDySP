@@ -1,13 +1,22 @@
-# Python files
+# Python cache
 __pycache__/
+*.py[cod]
+*.pyo
 
 # Sphinx documentation
 docs/build/
+docs/_build/
 
-# Build package
-dist
-*.egg-info
+# Build package / distributions
+dist/
+build/
+*.egg-info/
 .pypirc
 
+# Virtual environments
+venv/
+.env/
+.venv/
+
 # Working applications
-applications
+applications/
