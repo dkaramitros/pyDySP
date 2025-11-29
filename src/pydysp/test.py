@@ -56,6 +56,8 @@ class Test:
         Free-form metadata dictionary.
     """
 
+    __test__ = False  # to avoid pytest collecting this as a test case
+
     # Name of the experiment (e.g. 'Shaking table Test 07').
     name: str
     # Longer description.

@@ -1,4 +1,5 @@
 import scipy.io as sio
+import warnings
 
 
 def downsample(file_in: str, file_out: str, factor: int = 20) -> None:
@@ -44,4 +45,10 @@ def downsample(file_in: str, file_out: str, factor: int = 20) -> None:
         if hasattr(val, "shape") and getattr(val, "ndim", 0) >= 1:
             imported_data[key] = val[::factor]
 
-    sio.savemat(file_out, imported_data)
+    # Silence SciPy's MAT-file warnings about __header__/__version__/__globals__
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Starting field name with a underscore",
+        )
+        sio.savemat(file_out, imported_data)
