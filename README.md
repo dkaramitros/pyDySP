@@ -1,4 +1,5 @@
-# pyDySP — Dynamic Signal Processing for Experimental Data
+# pyDySP
+Dynamic Signal Processing for Experimental Data
 
 [![Tests](https://github.com/dkaramitros/pyDySP/actions/workflows/tests.yml/badge.svg)](https://github.com/dkaramitros/pyDySP/actions/workflows/tests.yml)
 [![Docs](https://img.shields.io/readthedocs/pydysp)](https://pydysp.readthedocs.io/en/latest/)
