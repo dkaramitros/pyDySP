@@ -94,7 +94,7 @@ class Test:
         """
         return len(self.channels)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key) -> Channel:
         """
         Channel lookup by index or name.
 
@@ -217,7 +217,7 @@ class Test:
     # ------------------------------------------------------------------ #
 
     @property
-    def channel(self):
+    def channel(self) -> "Test":
         """
         Convenience view over this Test's channels.
 
@@ -301,7 +301,7 @@ class Test:
         dt0 = self.channels[0].dt
         # Check consistency with all other channels
         for ch in self.channels[1:]:
-            if ch.dt != dt0:
+            if not np.isclose(ch.dt, dt0, rtol=1e-6, atol=1e-12):
                 raise ValueError("Inconsistent dt across channels.")
         return dt0
 
@@ -469,8 +469,6 @@ class Test:
         Header fields are used only for metadata.
 
         Parameters
-        ----------
-                Parameters
         ----------
         filename :
             Path to the MAT file.
@@ -677,7 +675,6 @@ class Test:
                 return None
 
         # 1. Header metadata
-        header_dict: dict[str, Any] = {}
         header_dict = {
             "Testdate": _get("Testdate"),
             "Time": _get("Time"),
@@ -892,66 +889,50 @@ class Test:
         Functional style: Test is treated as immutable; this method returns
         a new instance rather than mutating in place.
         """
-        # TODO: use `replace` from dataclasses to keep things immutable-ish
-        raise NotImplementedError
-
-    def with_channels(
-        self,
-        channels: Sequence[Channel],
-        *,
-        extend: bool = False,
-    ) -> "Test":
-        """
-        Return a new Test with a modified channels list.
-
-        - If extend=False: replace existing channels with the provided list.
-        - If extend=True: append provided channels to the existing ones.
-        """
-        # TODO: construct new Test with updated channels
-        raise NotImplementedError
+        if not isinstance(ch, Channel):
+            raise TypeError("add_channel expects a Channel instance.")
+        new_channels = list(self.channels)
+        new_channels.append(ch)
+        return type(self)(
+            name=self.name,
+            description=self.description,
+            source_file=self.source_file,
+            timestamp=self.timestamp,
+            channels=new_channels,
+            tags=set(self.tags),
+            meta=dict(self.meta),
+        )
 
     def drop_channels(self, selector: ChannelSelector) -> "Test":
         """
         Return a new Test with the selected channels removed.
+
+        The selector can be anything accepted by `iter_channels`, e.g.:
+        - int           -> index
+        - str           -> name (name_user / name_input)
+        - Channel       -> that channel
+        - slice         -> slice of the channels list
+        - Sequence[...] -> list of the above
         """
-        # TODO: resolve selector and filter out matching channels
-        raise NotImplementedError
+        if selector is None:
+            raise ValueError("drop_channels requires a non-None selector.")
+        # Resolve which Channel objects to remove
+        channels_to_drop = list(self.iter_channels(selector))
+        # Keep all channels that are not in channels_to_drop
+        new_channels = [ch for ch in self.channels if ch not in channels_to_drop]
+        return type(self)(
+            name=self.name,
+            description=self.description,
+            source_file=self.source_file,
+            timestamp=self.timestamp,
+            channels=new_channels,
+            tags=set(self.tags),
+            meta=dict(self.meta),
+        )
 
     # ------------------------------------------------------------------ #
-    # Quality checks and consistency
+    # Batch processing
     # ------------------------------------------------------------------ #
-
-    def check_sampling_consistency(
-        self,
-        *,
-        rtol: float = 1e-6,
-    ) -> Dict[str, Any]:
-        """
-        Inspect all channels and check that:
-
-        - All dt are defined and consistent within relative tolerance rtol.
-        - Time vectors are aligned (same length and same start/end times).
-
-        Returns a small report dictionary with flags and diagnostics.
-        """
-        # TODO: compute and return consistency report
-        raise NotImplementedError
-
-    def detect_gaps_or_nans(
-        self,
-        selector: ChannelSelector = None,
-    ) -> Dict[int, Dict[str, Any]]:
-        """
-        Scan selected channels for NaNs, infs, or suspicious gaps in time.
-
-        Returns
-        -------
-        Dict[int, Dict[str, Any]]
-            Mapping from channel index to a small report dict
-            (e.g. counts of NaNs, indices, gap stats).
-        """
-        # TODO: implement simple checks for data quality per channel
-        raise NotImplementedError
 
     # ------------------------------------------------------------------ #
     # Batch processing (experiment-level wrappers)
@@ -964,10 +945,43 @@ class Test:
     ) -> "Test":
         """
         Return a new Test where selected channels are replaced by
-        their drift-corrected versions (using Channel.drift_corrected). :contentReference[oaicite:4]{index=4}
+        their drift-corrected versions (using Channel.drift_corrected).
+
+        Parameters
+        ----------
+        selector :
+            Which channels to process (index, name, Channel, list, slice…).
+            If None (default), all channels are processed.
+        **override :
+            Keyword arguments forwarded to Channel.drift_corrected, e.g.
+            ``points=100``. These override the stored drift parameters.
+
+        Returns
+        -------
+        Test
+            New Test instance with updated channels.
         """
-        # TODO: map selector → list of indices and apply Channel.drift_corrected
-        raise NotImplementedError
+        if selector is None:
+            selected = list(self.channels)
+        else:
+            selected = list(self.iter_channels(selector))
+        if not selected:
+            raise ValueError("No channels selected for drift correction.")
+        new_channels: list[Channel] = []
+        for ch in self.channels:
+            if ch in selected:
+                new_channels.append(ch.drift_corrected(**override))
+            else:
+                new_channels.append(ch)
+        return type(self)(
+            name=self.name,
+            description=self.description,
+            source_file=self.source_file,
+            timestamp=self.timestamp,
+            channels=new_channels,
+            tags=set(self.tags),
+            meta=dict(self.meta),
+        )
 
     def filtered(
         self,
@@ -977,9 +991,43 @@ class Test:
         """
         Return a new Test where selected channels are replaced by
         their filtered versions (using Channel.filtered).
+
+        Parameters
+        ----------
+        selector :
+            Which channels to process (index, name, Channel, list, slice…).
+            If None (default), all channels are processed.
+        **override :
+            Keyword arguments forwarded to Channel.filtered, e.g.
+            ``btype="highpass"``, ``fc=0.5``, ``order=4``. These override
+            the stored filter parameters.
+
+        Returns
+        -------
+        Test
+            New Test instance with updated channels.
         """
-        # TODO: call Channel.filtered on each selected channel
-        raise NotImplementedError
+        if selector is None:
+            selected = list(self.channels)
+        else:
+            selected = list(self.iter_channels(selector))
+        if not selected:
+            raise ValueError("No channels selected for filtering.")
+        new_channels: list[Channel] = []
+        for ch in self.channels:
+            if ch in selected:
+                new_channels.append(ch.filtered(**override))
+            else:
+                new_channels.append(ch)
+        return type(self)(
+            name=self.name,
+            description=self.description,
+            source_file=self.source_file,
+            timestamp=self.timestamp,
+            channels=new_channels,
+            tags=set(self.tags),
+            meta=dict(self.meta),
+        )
 
     def baseline_corrected(
         self,
@@ -989,9 +1037,42 @@ class Test:
         """
         Return a new Test where selected channels are replaced by
         baseline-corrected versions (using Channel.baseline_corrected).
+
+        Parameters
+        ----------
+        selector :
+            Which channels to process (index, name, Channel, list, slice…).
+            If None (default), all channels are processed.
+        **override :
+            Keyword arguments forwarded to Channel.baseline_corrected, e.g.
+            ``type="linear"``. These override the stored baseline parameters.
+
+        Returns
+        -------
+        Test
+            New Test instance with updated channels.
         """
-        # TODO: call Channel.baseline_corrected on each selected channel
-        raise NotImplementedError
+        if selector is None:
+            selected = list(self.channels)
+        else:
+            selected = list(self.iter_channels(selector))
+        if not selected:
+            raise ValueError("No channels selected for baseline correction.")
+        new_channels: list[Channel] = []
+        for ch in self.channels:
+            if ch in selected:
+                new_channels.append(ch.baseline_corrected(**override))
+            else:
+                new_channels.append(ch)
+        return type(self)(
+            name=self.name,
+            description=self.description,
+            source_file=self.source_file,
+            timestamp=self.timestamp,
+            channels=new_channels,
+            tags=set(self.tags),
+            meta=dict(self.meta),
+        )
 
     def trimmed(
         self,
@@ -1002,15 +1083,49 @@ class Test:
         Return a new Test where selected channels are replaced by
         trimmed versions (using Channel.trimmed).
 
-        This is the generic "manual window" trimming interface.
+        This is the generic manual-window trimming interface based on
+        explicit ``t_start`` / ``t_end`` (in seconds).
+
+        Parameters
+        ----------
+        selector :
+            Which channels to process (index, name, Channel, list, slice…).
+            If None (default), all channels are processed.
+        **override :
+            Keyword arguments forwarded to Channel.trimmed, typically
+            including ``t_start`` and ``t_end`` (in seconds).
+
+        Returns
+        -------
+        Test
+            New Test instance with updated channels.
         """
-        # TODO: call Channel.trimmed on each selected channel
-        raise NotImplementedError
+        if selector is None:
+            selected = list(self.channels)
+        else:
+            selected = list(self.iter_channels(selector))
+        if not selected:
+            raise ValueError("No channels selected for trimming.")
+        new_channels: list[Channel] = []
+        for ch in self.channels:
+            if ch in selected:
+                new_channels.append(ch.trimmed(**override))
+            else:
+                new_channels.append(ch)
+        return type(self)(
+            name=self.name,
+            description=self.description,
+            source_file=self.source_file,
+            timestamp=self.timestamp,
+            channels=new_channels,
+            tags=set(self.tags),
+            meta=dict(self.meta),
+        )
 
     def trimmed_by_threshold(
         self,
         selector: ChannelSelector = None,
-        *,
+        ref: Optional[ChannelKey] = None,
         threshold: float = 0.01,
         use_abs: bool = True,
         buffer_before: float = 0.0,
@@ -1019,19 +1134,103 @@ class Test:
         use_cache: bool = True,
     ) -> "Test":
         """
-        Return a new Test where selected channels are trimmed using the
-        classic bracketed-duration threshold method. :contentReference[oaicite:5]{index=5}
+        Return a new Test where selected channels are trimmed using a single
+        time window derived from one reference channel and a threshold
+        criterion.
 
-        Delegates to Channel.trim_by_threshold for each channel, but you may
-        later choose to align windows based on a reference channel.
+        Strategy
+        --------
+        - Choose a reference channel:
+            * If `ref` is given, use that (must belong to this Test and
+              be part of the selected set).
+            * Otherwise, use the first selected channel.
+        - On the reference channel, compute a threshold-based window via
+          Channel.trim_by_threshold.
+        - Extract (t_start, t_end) from the reference channel's trim_params.
+        - Apply Channel.trimmed(t_start, t_end) to all selected channels.
+
+        Parameters
+        ----------
+        selector :
+            Which channels to trim (index, name, Channel, list, slice…).
+            If None (default), all channels are trimmed.
+        ref :
+            Reference channel used to define the trim window. Can be an
+            index, name, or Channel instance. If None, the first selected
+            channel is used. The reference must be part of the selected set.
+        threshold :
+            Threshold value in signal units used to detect when the motion
+            starts/stops (see Channel.trim_by_threshold).
+        use_abs :
+            If True, thresholding is applied to abs(signal). If False,
+            thresholding is applied to the raw signal.
+        buffer_before, buffer_after :
+            Time buffers (in seconds) to extend the window before/after
+            the detected start/end times.
+        processed :
+            Whether to use processed data for the reference channel when
+            computing the window.
+        use_cache :
+            Whether to use the Channel-level processing cache for the
+            reference channel.
+
+        Returns
+        -------
+        Test
+            New Test instance with aligned trimming across channels.
         """
-        # TODO: implement strategy (e.g. derive window from ref channel, apply to all)
-        raise NotImplementedError
+        # Resolve selected channels
+        if selector is None:
+            selected = list(self.channels)
+        else:
+            selected = list(self.iter_channels(selector))
+        if not selected:
+            raise ValueError("No channels selected for threshold-based trimming.")
+        # Resolve reference channel
+        if ref is None:
+            ref_ch = selected[0]
+        else:
+            if isinstance(ref, Channel):
+                if ref not in self.channels:
+                    raise ValueError("Reference Channel is not part of this Test.")
+                ref_ch = ref
+            else:
+                ref_ch = self[ref]  # int or str via __getitem__
+        if ref_ch not in selected:
+            raise ValueError("Reference channel must be part of the selected channels.")
+        # Compute window on reference channel
+        ref_trimmed = ref_ch.trim_by_threshold(
+            threshold=threshold,
+            use_abs=use_abs,
+            buffer_before=buffer_before,
+            buffer_after=buffer_after,
+            processed=processed,
+            use_cache=use_cache,
+        )
+        params = getattr(ref_trimmed, "trim_params", {})
+        t_start = params.get("t_start", float(ref_ch.time[0]))
+        t_end = params.get("t_end", float(ref_ch.time[-1]))
+        # Apply same window to all selected channels
+        new_channels: list[Channel] = []
+        for ch in self.channels:
+            if ch in selected:
+                new_channels.append(ch.trimmed(t_start=t_start, t_end=t_end))
+            else:
+                new_channels.append(ch)
+        return type(self)(
+            name=self.name,
+            description=self.description,
+            source_file=self.source_file,
+            timestamp=self.timestamp,
+            channels=new_channels,
+            tags=set(self.tags),
+            meta=dict(self.meta),
+        )
 
     def trimmed_by_fraction_of_peak(
         self,
         selector: ChannelSelector = None,
-        *,
+        ref: Optional[ChannelKey] = None,
         fraction: float = 0.05,
         use_abs: bool = True,
         buffer_before: float = 0.0,
@@ -1040,16 +1239,99 @@ class Test:
         use_cache: bool = True,
     ) -> "Test":
         """
-        Return a new Test where selected channels are trimmed to the time window
-        where the signal exceeds a fraction of its peak amplitude.
+        Return a new Test where selected channels are trimmed to a single
+        time window derived from a fraction-of-peak criterion on one
+        reference channel.
+
+        Strategy
+        --------
+        - Choose a reference channel (like trimmed_by_threshold).
+        - On the reference channel, compute the window via
+          Channel.trim_by_fraction_of_peak.
+        - Extract (t_start, t_end) from the reference channel's trim_params.
+        - Apply Channel.trimmed(t_start, t_end) to all selected channels.
+
+        Parameters
+        ----------
+        selector :
+            Which channels to trim (index, name, Channel, list, slice…).
+            If None (default), all channels are trimmed.
+        ref :
+            Reference channel used to define the trim window. Can be an
+            index, name, or Channel instance. If None, the first selected
+            channel is used. The reference must be part of the selected set.
+        fraction :
+            Fraction of the peak amplitude in (0, 1] used to define the
+            effective-motion window (see Channel.trim_by_fraction_of_peak).
+        use_abs :
+            If True, use absolute amplitude when computing the peak.
+        buffer_before, buffer_after :
+            Time buffers (in seconds) to extend the window before/after
+            the detected start/end times.
+        processed :
+            Whether to use processed data for the reference channel when
+            computing the window.
+        use_cache :
+            Whether to use the Channel-level processing cache for the
+            reference channel.
+
+        Returns
+        -------
+        Test
+            New Test instance with aligned trimming across channels.
         """
-        # TODO: delegate to Channel.trim_by_fraction_of_peak with a consistent strategy
-        raise NotImplementedError
+        # Resolve selected channels
+        if selector is None:
+            selected = list(self.channels)
+        else:
+            selected = list(self.iter_channels(selector))
+        if not selected:
+            raise ValueError("No channels selected for fraction-of-peak trimming.")
+        # Resolve reference channel
+        if ref is None:
+            ref_ch = selected[0]
+        else:
+            if isinstance(ref, Channel):
+                if ref not in self.channels:
+                    raise ValueError("Reference Channel is not part of this Test.")
+                ref_ch = ref
+            else:
+                ref_ch = self[ref]
+        if ref_ch not in selected:
+            raise ValueError("Reference channel must be part of the selected channels.")
+        # Compute window on reference channel
+        ref_trimmed = ref_ch.trim_by_fraction_of_peak(
+            fraction=fraction,
+            use_abs=use_abs,
+            buffer_before=buffer_before,
+            buffer_after=buffer_after,
+            processed=processed,
+            use_cache=use_cache,
+        )
+        params = getattr(ref_trimmed, "trim_params", {})
+        t_start = params.get("t_start", float(ref_ch.time[0]))
+        t_end = params.get("t_end", float(ref_ch.time[-1]))
+        # Apply same window to all selected channels
+        new_channels: list[Channel] = []
+        for ch in self.channels:
+            if ch in selected:
+                new_channels.append(ch.trimmed(t_start=t_start, t_end=t_end))
+            else:
+                new_channels.append(ch)
+        return type(self)(
+            name=self.name,
+            description=self.description,
+            source_file=self.source_file,
+            timestamp=self.timestamp,
+            channels=new_channels,
+            tags=set(self.tags),
+            meta=dict(self.meta),
+        )
 
     def trimmed_by_arias(
         self,
         selector: ChannelSelector = None,
-        *,
+        ref: Optional[ChannelKey] = None,
         lower: float = 0.05,
         upper: float = 0.95,
         g: float = 9.81,
@@ -1059,166 +1341,775 @@ class Test:
         use_cache: bool = True,
     ) -> "Test":
         """
-        Return a new Test where selected channels are trimmed to the Arias-intensity
-        significant duration window (e.g. 5–95% of Arias intensity). :contentReference[oaicite:6]{index=6}
+        Return a new Test where selected channels are trimmed to a single
+        Arias-intensity significant-duration window derived from one
+        reference channel (e.g. 5–95% of Arias intensity).
+
+        Strategy
+        --------
+        - Choose a reference channel (like trimmed_by_threshold).
+        - On the reference channel, compute the Arias-based window via
+          Channel.trim_by_arias.
+        - Extract (t_start, t_end) from the reference channel's trim_params.
+        - Apply Channel.trimmed(t_start, t_end) to all selected channels.
+
+        Parameters
+        ----------
+        selector :
+            Which channels to trim (index, name, Channel, list, slice…).
+            If None (default), all channels are trimmed.
+        ref :
+            Reference channel used to define the trim window. Can be an
+            index, name, or Channel instance. If None, the first selected
+            channel is used. The reference must be part of the selected set.
+        lower, upper :
+            Lower and upper fractions of Arias intensity (in [0, 1]) that
+            define the significant-duration window, typically 0.05 and 0.95.
+        g :
+            Gravitational acceleration used for Arias intensity, in m/s^2.
+        buffer_before, buffer_after :
+            Time buffers (in seconds) to extend the window before/after
+            the detected lower/upper times.
+        processed :
+            Whether to use processed data for the reference channel when
+            computing the window.
+        use_cache :
+            Whether to use the Channel-level processing cache for the
+            reference channel.
+
+        Returns
+        -------
+        Test
+            New Test instance with aligned trimming across channels.
         """
-        # TODO: use Channel.trim_by_arias, potentially aligning on a reference channel
-        raise NotImplementedError
+        # Resolve selected channels
+        if selector is None:
+            selected = list(self.channels)
+        else:
+            selected = list(self.iter_channels(selector))
+        if not selected:
+            raise ValueError("No channels selected for Arias-based trimming.")
+        # Resolve reference channel
+        if ref is None:
+            ref_ch = selected[0]
+        else:
+            if isinstance(ref, Channel):
+                if ref not in self.channels:
+                    raise ValueError("Reference Channel is not part of this Test.")
+                ref_ch = ref
+            else:
+                ref_ch = self[ref]
+        if ref_ch not in selected:
+            raise ValueError("Reference channel must be part of the selected channels.")
+        # Compute window on reference channel
+        ref_trimmed = ref_ch.trim_by_arias(
+            lower=lower,
+            upper=upper,
+            g=g,
+            buffer_before=buffer_before,
+            buffer_after=buffer_after,
+            processed=processed,
+            use_cache=use_cache,
+        )
+        params = getattr(ref_trimmed, "trim_params", {})
+        t_start = params.get("t_start", float(ref_ch.time[0]))
+        t_end = params.get("t_end", float(ref_ch.time[-1]))
+        # Apply same window to all selected channels
+        new_channels: list[Channel] = []
+        for ch in self.channels:
+            if ch in selected:
+                new_channels.append(ch.trimmed(t_start=t_start, t_end=t_end))
+            else:
+                new_channels.append(ch)
+        return type(self)(
+            name=self.name,
+            description=self.description,
+            source_file=self.source_file,
+            timestamp=self.timestamp,
+            channels=new_channels,
+            tags=set(self.tags),
+            meta=dict(self.meta),
+        )
 
     # ------------------------------------------------------------------ #
-    # Pairwise analysis (transfer functions, time delay, cross-spectra)
+    # Pairwise analysis
     # ------------------------------------------------------------------ #
 
     def cross_spectrum(
         self,
-        from_ch: ChannelKey,
-        to_ch: ChannelKey,
-        *,
+        x: ChannelKey,
+        y: ChannelKey,
         processed: bool = True,
         use_cache: bool = True,
-        **welch_kwargs: Any,
-    ) -> Tuple[np.ndarray, np.ndarray]:
+        **kwargs: Any,
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
-        Compute cross-spectrum (CSD) between two channels using Welch-like estimates.
+        Compute the cross power spectral density (CPSD) between two channels using ``scipy.signal.csd``.
 
-        Returns a (f, Pxy) tuple.
-        """
-        # TODO: fetch x(t), y(t) from the two channels and call scipy.signal.csd
-        raise NotImplementedError
-
-    def transfer_function(
-        self,
-        from_ch: ChannelKey,
-        to_ch: ChannelKey,
-        *,
-        method: Literal["H1", "H2"] = "H1",
-        processed: bool = True,
-        use_cache: bool = True,
-        **welch_kwargs: Any,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Compute a single-input single-output transfer function between two channels.
+        Parameters
+        ----------
+        x :
+            Input (excitation) channel key (index, name or Channel instance).
+        y :
+            Output (response) channel key (index, name or Channel instance).
+        processed : bool, optional
+            If True (default), use processed data from each channel.
+        use_cache : bool, optional
+            If True (default), use the Channel-level processing cache.
+        **kwargs :
+            Additional keyword arguments forwarded to ``scipy.signal.csd``,
+            e.g. ``nperseg``, ``window``, ``noverlap``.
+            If ``nperseg`` is not given, a MATLAB-like default of ``min(256, n)`` is used.
 
         Returns
         -------
         f : np.ndarray
-            Frequency axis (Hz).
-        H : np.ndarray
-            Complex transfer function values.
-        coh : np.ndarray
-            Magnitude-squared coherence.
+            Frequency array in Hz.
+        Pxy : np.ndarray
+            Complex cross-spectrum ``Pxy(f)``.
         """
-        # TODO: use PSDs + CSD to compute transfer function and coherence
-        raise NotImplementedError
+        if isinstance(x, Channel):
+            if x not in self.channels:
+                raise ValueError("Input Channel is not part of this Test.")
+            ch_x = x
+        else:
+            ch_x = self[x]
+        if isinstance(y, Channel):
+            if y not in self.channels:
+                raise ValueError("Output Channel is not part of this Test.")
+            ch_y = y
+        else:
+            ch_y = self[y]
+        _, x_data = ch_x.xy(processed=processed, use_cache=use_cache)
+        _, y_data = ch_y.xy(processed=processed, use_cache=use_cache)
+        if x_data.size == 0 or y_data.size == 0:
+            raise ValueError("Cannot compute cross spectrum of empty signal.")
+        if x_data.size != y_data.size:
+            raise ValueError("Channels must have the same length for cross spectrum.")
+        if ch_x.dt is None or ch_x.dt <= 0.0:
+            raise ValueError(
+                "Cross spectrum requires a positive dt on the input channel."
+            )
+        if ch_y.dt is None or ch_y.dt <= 0.0:
+            raise ValueError(
+                "Cross spectrum requires a positive dt on the output channel."
+            )
+        if ch_x.dt != ch_y.dt:
+            raise ValueError(
+                "Input and output channels must have the same sampling interval dt."
+            )
+        n = x_data.size
+        fs = 1.0 / ch_x.dt
+        if "nperseg" not in kwargs:
+            kwargs["nperseg"] = min(256, n)
+        f, Pxy = sp.signal.csd(x_data, y_data, fs=fs, **kwargs)
+        return f, Pxy
+
+    def transfer_function(
+        self,
+        x: ChannelKey,
+        y: ChannelKey,
+        kind: str = "H1",
+        processed: bool = True,
+        use_cache: bool = True,
+        **kwargs: Any,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Estimate the frequency-domain transfer function between two channels.
+
+        This uses cross- and auto-spectra computed with ``scipy.signal.csd``. Two standard estimators are supported:
+        - H1: ``H1(f) = G_yx(f) / G_xx(f)``, preferred when the input is noisy.
+        - H2: ``H2(f) = G_yy(f) / G_yx(f)``, preferred when the output is noisy.
+
+        Here ``G_yx`` is the cross-spectrum between output ``y`` and input ``x``, and ``G_xx``, ``G_yy`` are the auto-spectra of input and output.
+
+        Parameters
+        ----------
+        x :
+            Input (excitation) channel key (index, name or Channel instance).
+        y :
+            Output (response) channel key (index, name or Channel instance).
+        kind : {"H1", "H2"}, optional
+            Type of transfer-function estimator (default "H1").
+        processed : bool, optional
+            If True (default), use processed data from each channel.
+        use_cache : bool, optional
+            If True (default), use the Channel-level processing cache.
+        **kwargs :
+            Additional keyword arguments forwarded to ``scipy.signal.csd``,
+            e.g. ``nperseg``, ``window``, ``noverlap``.
+            If ``nperseg`` is not given, a MATLAB-like default of ``min(256, n)`` is used.
+
+        Returns
+        -------
+        f : np.ndarray
+            Frequency array in Hz.
+        H : np.ndarray
+            Complex transfer function values ``H(f)``.
+        """
+        if isinstance(x, Channel):
+            if x not in self.channels:
+                raise ValueError("Input Channel is not part of this Test.")
+            ch_x = x
+        else:
+            ch_x = self[x]
+        if isinstance(y, Channel):
+            if y not in self.channels:
+                raise ValueError("Output Channel is not part of this Test.")
+            ch_y = y
+        else:
+            ch_y = self[y]
+        _, x_data = ch_x.xy(processed=processed, use_cache=use_cache)
+        _, y_data = ch_y.xy(processed=processed, use_cache=use_cache)
+        if x_data.size == 0 or y_data.size == 0:
+            raise ValueError("Cannot compute transfer function of empty signal.")
+        if x_data.size != y_data.size:
+            raise ValueError(
+                "Channels must have the same length for transfer function."
+            )
+        if ch_x.dt is None or ch_x.dt <= 0.0:
+            raise ValueError(
+                "Transfer function requires a positive dt on the input channel."
+            )
+        if ch_y.dt is None or ch_y.dt <= 0.0:
+            raise ValueError(
+                "Transfer function requires a positive dt on the output channel."
+            )
+        if ch_x.dt != ch_y.dt:
+            raise ValueError(
+                "Input and output channels must have the same sampling interval dt."
+            )
+        n = x_data.size
+        fs = 1.0 / ch_x.dt
+        if "nperseg" not in kwargs:
+            kwargs["nperseg"] = min(256, n)
+        f, Gyx = sp.signal.csd(y_data, x_data, fs=fs, **kwargs)
+        _, Gxx = sp.signal.csd(x_data, x_data, fs=fs, **kwargs)
+        _, Gyy = sp.signal.csd(y_data, y_data, fs=fs, **kwargs)
+        kind_u = kind.upper()
+        if kind_u == "H1":
+            H = Gyx / Gxx
+        elif kind_u == "H2":
+            H = Gyy / Gyx
+        else:
+            raise ValueError(
+                f"Unsupported transfer-function kind {kind!r}, use 'H1' or 'H2'."
+            )
+        return f, H
 
     def time_delay(
         self,
-        from_ch: ChannelKey,
-        to_ch: ChannelKey,
-        *,
-        method: Literal["xcorr", "argmax_phase"] = "xcorr",
+        x: ChannelKey,
+        y: ChannelKey,
         processed: bool = True,
         use_cache: bool = True,
-        max_lag: Optional[float] = None,
     ) -> float:
         """
-        Estimate time delay between two channels.
+        Estimate the time delay between two channels using cross-correlation.
 
-        Methods:
-        - 'xcorr': use time-domain cross-correlation and take lag of max peak.
-        - 'argmax_phase': infer delay from linear phase of transfer function.
+        A positive delay means that the output ``y`` lags the input ``x``,
+        based on the lag at which the cross-correlation between ``y`` and ``x`` is maximized.
+        Parameters
+        ----------
+        x :
+            Input (excitation) channel key (index, name or Channel instance).
+        y :
+            Output (response) channel key (index, name or Channel instance).
+        processed : bool, optional
+            If True (default), use processed data from each channel.
+        use_cache : bool, optional
+            If True (default), use the Channel-level processing cache.
+        Returns
+        -------
+        tau : float
+            Estimated time delay in seconds (positive if ``y`` lags ``x``).
         """
-        # TODO: implement one or both strategies for delay estimation
-        raise NotImplementedError
+        if isinstance(x, Channel):
+            if x not in self.channels:
+                raise ValueError("Input Channel is not part of this Test.")
+            ch_x = x
+        else:
+            ch_x = self[x]
+        if isinstance(y, Channel):
+            if y not in self.channels:
+                raise ValueError("Output Channel is not part of this Test.")
+            ch_y = y
+        else:
+            ch_y = self[y]
+        _, x_data = ch_x.xy(processed=processed, use_cache=use_cache)
+        _, y_data = ch_y.xy(processed=processed, use_cache=use_cache)
+        if x_data.size == 0 or y_data.size == 0:
+            raise ValueError("Cannot compute time delay for empty signal.")
+        if x_data.size != y_data.size:
+            raise ValueError(
+                "Channels must have the same length for time-delay estimation."
+            )
+        if ch_x.dt is None or ch_x.dt <= 0.0:
+            raise ValueError(
+                "Time-delay estimation requires a positive dt on the input channel."
+            )
+        if ch_y.dt is None or ch_y.dt <= 0.0:
+            raise ValueError(
+                "Time-delay estimation requires a positive dt on the output channel."
+            )
+        if ch_x.dt != ch_y.dt:
+            raise ValueError(
+                "Input and output channels must have the same sampling interval dt."
+            )
+        n = x_data.size
+        x0 = x_data - float(np.mean(x_data))
+        y0 = y_data - float(np.mean(y_data))
+        c = np.correlate(y0, x0, mode="full")
+        lags = np.arange(-n + 1, n)
+        k = lags[int(np.argmax(c))]
+        return float(k * ch_x.dt)
 
     # ------------------------------------------------------------------ #
     # Basic modal identification (skeleton only)
     # ------------------------------------------------------------------ #
 
-    def modal_identification(
+    def ema_model(
         self,
-        selector: ChannelSelector = None,
-        *,
-        method: Literal["ssi-cov", "ssi-data", "peak-picking"] = "ssi-cov",
-        order_range: Optional[Sequence[int]] = None,
+        input: ChannelKey,
+        outputs: ChannelSelector,
+        lower: float,
+        upper: float,
+        pol_order_high: int = 60,
+        driving_point: int | None = None,
+        frf_type: str = "accelerance",
+        kind: str = "H1",
+        processed: bool = True,
+        use_cache: bool = True,
         **kwargs: Any,
-    ) -> Mapping[str, Any]:
+    ):
         """
-        Perform basic output-only or input-output modal identification.
+        Build an sdypy-EMA Model for LSCF-based experimental modal analysis.
 
-        The exact implementation (e.g. stochastic subspace identification,
-        frequency-domain peak picking) will be added later.
+        This method computes FRFs between one input channel and multiple output channels using pyDySP,
+        then constructs and returns an ``sdypy.EMA.Model`` instance.
 
-        Returns a generic dictionary with e.g. natural frequencies, damping
-        ratios, and (optionally) mode shapes and a stabilization diagram object.
+        The returned object provides pole estimation, stabilization charts, modal parameter extraction and FRF reconstruction.
+
+        Parameters
+        ----------
+        input :
+            Input (excitation) channel key (index, name or Channel instance).
+        outputs :
+            Selector for output (response) channels (index, name, list, slice, etc.).
+        lower : float
+            Lower frequency limit in Hz for pole estimation (``lower`` in ``EMA.Model``).
+        upper : float
+            Upper frequency limit in Hz for pole estimation (``upper`` in ``EMA.Model``).
+        pol_order_high : int, optional
+            Highest polynomial order for LSCF (``pol_order_high`` in ``EMA.Model``, default 60).
+        driving_point : int or None, optional
+            Index of the driving FRF location in the FRF matrix (row index). If None (default), no driving point is used and modal shapes are not scaled.
+        frf_type : {"accelerance","mobility","receptance"}, optional
+            Type of FRF passed to ``EMA.Model`` (default "accelerance").
+        kind : {"H1","H2"}, optional
+            Transfer-function estimator for FRFs (default "H1", see ``Test.transfer_function``).
+        processed : bool, optional
+            If True (default), use processed data from each channel for FRF estimation.
+        use_cache : bool, optional
+            If True (default), use the Channel-level processing cache.
+        **kwargs :
+            Additional keyword arguments forwarded to ``Test.transfer_function`` and ultimately to ``scipy.signal.csd`` (e.g. ``nperseg``, ``window``, ``noverlap``). If ``nperseg`` is not supplied, the MATLAB-like default used in pyDySP is applied.
+        Returns
+        -------
+        model :
+            Instance of ``sdypy.EMA.Model`` constructed from the computed FRF matrix and frequency vector.
+        Raises
+        ------
+        ImportError
+            If the optional dependency ``sdypy`` (and its EMA module) is not installed.
+        ValueError
+            If no output channels are selected or FRFs cannot be consistently estimated.
+        Notes
+        -----
+        Typical usage of the returned EMA model is:
+        1) Compute poles with LSCF::
+               model.get_poles()
+        2) Select stable poles either interactively (stability chart)::
+               model.select_poles()
+           or automatically if approximate natural frequencies are known::
+               model.select_closest_poles([f1, f2, ...])
+        3) Reconstruct FRFs and get modal constants (LSFD)::
+               H_rec, A = model.get_constants(method="lsfd")
+        4) Access modal parameters::
+               model.nat_freq   # natural frequencies
+               model.nat_xi     # damping ratios
+               model.phi        # modal shapes, if a driving_point was specified
         """
-        # TODO: design and implement modal identification workflow
-        raise NotImplementedError
+        try:
+            from sdypy import EMA
+        except ImportError as exc:
+            raise ImportError(
+                "Experimental modal analysis requires the optional dependency 'sdypy'. "
+                "Install it with 'pip install sdypy' or 'pip install sdypy-EMA'."
+            ) from exc
+        if isinstance(input, Channel):
+            if input not in self.channels:
+                raise ValueError("Input Channel is not part of this Test.")
+            ch_in = input
+        else:
+            ch_in = self[input]
+        output_channels = list(self.iter_channels(outputs))
+        if not output_channels:
+            raise ValueError("No output channels selected for EMA.")
+        f_ref: np.ndarray | None = None
+        H_rows: list[np.ndarray] = []
+        for ch_out in output_channels:
+            f, H_xy = self.transfer_function(
+                x=ch_in,
+                y=ch_out,
+                kind=kind,
+                processed=processed,
+                use_cache=use_cache,
+                **kwargs,
+            )
+            if f_ref is None:
+                f_ref = f
+            else:
+                if f.shape != f_ref.shape or not np.allclose(f, f_ref):
+                    raise ValueError(
+                        "All FRFs must share the same frequency vector for EMA."
+                    )
+            H_rows.append(H_xy)
+        assert f_ref is not None
+        frf_matrix = np.vstack(H_rows)
+        if lower >= upper:
+            raise ValueError("Argument 'lower' must be smaller than 'upper'.")
+        mask = (f_ref >= lower) & (f_ref <= upper)
+        if not np.any(mask):
+            raise ValueError(
+                "No frequency points within the specified [lower, upper] band."
+            )
+        f_band = f_ref[mask]
+        frf_band = frf_matrix[:, mask]
+        if driving_point is not None:
+            if not (0 <= driving_point < frf_band.shape[0]):
+                raise ValueError(
+                    "driving_point index is out of range for the FRF matrix."
+                )
+        model = EMA.Model(
+            frf_band,
+            f_band,
+            lower=float(lower),
+            upper=float(upper),
+            pol_order_high=int(pol_order_high),
+            driving_point=driving_point,
+            frf_type=frf_type,
+        )
+        return model
+
+    def ema_stabilization_diagram(
+        self,
+        input: ChannelKey,
+        outputs: ChannelSelector,
+        *,
+        lower: float,
+        upper: float,
+        pol_order_high: int = 60,
+        driving_point: int | None = None,
+        frf_type: str = "accelerance",
+        kind: str = "H1",
+        processed: bool = True,
+        use_cache: bool = True,
+        **kwargs: Any,
+    ):
+        """
+        Compute an sdypy-EMA Model and display its stabilization diagram.
+        This is a convenience wrapper around ``ema_lscf`` that builds the EMA model, computes poles using LSCF and then calls ``model.select_poles()`` to open the stability chart for interactive selection of stable poles.
+        Parameters
+        ----------
+        input :
+            Input (excitation) channel key (index, name or Channel instance).
+        outputs :
+            Selector for output (response) channels (index, name, list, slice, etc.).
+        lower : float
+            Lower frequency limit in Hz for pole estimation (``lower`` in ``EMA.Model``).
+        upper : float
+            Upper frequency limit in Hz for pole estimation (``upper`` in ``EMA.Model``).
+        pol_order_high : int, optional
+            Highest polynomial order for LSCF (``pol_order_high`` in ``EMA.Model``, default 60).
+        driving_point : int or None, optional
+            Index of the driving FRF location in the FRF matrix (row index). If None (default), no driving point is used and modal shapes are not scaled.
+        frf_type : {"accelerance","mobility","receptance"}, optional
+            Type of FRF passed to ``EMA.Model`` (default "accelerance").
+        kind : {"H1","H2"}, optional
+            Transfer-function estimator for FRFs (default "H1", see ``Test.transfer_function``).
+        processed : bool, optional
+            If True (default), use processed data from each channel for FRF estimation.
+        use_cache : bool, optional
+            If True (default), use the Channel-level processing cache.
+        **kwargs :
+            Additional keyword arguments forwarded to ``Test.transfer_function`` and ultimately to ``scipy.signal.csd`` (e.g. ``nperseg``, ``window``, ``noverlap``).
+        Returns
+        -------
+        model :
+            Instance of ``sdypy.EMA.Model`` after pole computation. Stable poles can be read via attributes such as ``model.nat_freq`` and ``model.nat_xi`` once selection is complete.
+        Raises
+        ------
+        ImportError
+            If the optional dependency ``sdypy`` (and its EMA module) is not installed.
+        Notes
+        -----
+        This method performs three steps:
+        1) Builds the EMA model from pyDySP data using :meth:`ema_lscf`.
+        2) Calls ``model.get_poles()`` to compute poles for all orders up to ``pol_order_high``.
+        3) Calls ``model.select_poles()`` to display the stabilization chart, where you interactively pick stable poles. After closing the chart, modal parameters are available via ``model.nat_freq``, ``model.nat_xi`` and, if a driving point is given, ``model.phi``.
+        """
+        model = self.ema_lscf(
+            input=input,
+            outputs=outputs,
+            lower=lower,
+            upper=upper,
+            pol_order_high=pol_order_high,
+            driving_point=driving_point,
+            frf_type=frf_type,
+            kind=kind,
+            processed=processed,
+            use_cache=use_cache,
+            **kwargs,
+        )
+        model.get_poles()
+        model.select_poles()
+        return model
 
     # ------------------------------------------------------------------ #
     # Multi-channel plotting
     # ------------------------------------------------------------------ #
 
-    def plot_timehistories(
+    def _normalize_layout(self, layout: Any) -> list[list[Any]]:
+        """
+        Normalize a layout specification into a rectangular 2D list.
+
+        Each cell will be:
+        - None
+        - a single ChannelKey / Channel
+        - a sequence of ChannelKey / Channel
+        """
+        if not isinstance(layout, (list, tuple)):
+            raise TypeError("layout must be a sequence of rows or cells.")
+        if not layout:
+            raise ValueError("layout must not be empty.")
+        first = layout[0]
+        if not isinstance(first, (list, tuple)):
+            rows = [list(layout)]
+        else:
+            rows = [list(row) for row in layout]
+        max_len = max(len(row) for row in rows)
+        if max_len == 0:
+            raise ValueError("layout rows must not be empty.")
+        normalized: list[list[Any]] = []
+        for row in rows:
+            pad = max_len - len(row)
+            if pad > 0:
+                row = row + [None] * pad
+            normalized.append(row)
+        return normalized
+
+    def plot_grid(
         self,
-        selector: ChannelSelector = None,
+        layout: Any,
         *,
-        columns: int = 1,
+        plot_type: str = "Timehistory",
         sharex: bool = True,
-        sharey: bool = False,
-        processed: bool = True,
-        use_cache: bool = True,
-        include_labels: bool = True,
-        figsize: Optional[Tuple[float, float]] = None,
-        **plot_kwargs: Any,
-    ) -> np.ndarray:
+        sharey: bool = True,
+        title_suffix: str | None = None,
+        make_caption: bool = False,
+        **kwargs: Any,
+    ):
         """
-        Plot time histories of selected channels in a grid of subplots.
+        Plot channels from this Test in a grid of subplots.
 
-        - Uses Channel.plot under the hood.
-        - Arranges channels in `rows x columns` layout.
-        - Returns the array of axes.
+        The layout argument describes how channels are arranged on the grid.
+        Each cell in layout can be:
+        - None: leave the subplot empty;
+        - a single ChannelKey / Channel: one channel on that axes;
+        - a sequence (tuple or list) of ChannelKey / Channel: multiple channels
+          overlaid on the same axes, with a legend.
+
+        Examples
+        --------
+        2x2 grid, one channel per subplot::
+            test.plot_grid([[1, 2], [3, 4]])
+
+        Ragged rows (padded with empty cell)::
+            test.plot_grid([[1, 2], [3]])
+
+        Multiple channels on one axes with legend::
+            test.plot_grid([(2, 3), (4, 5)])
+
+        Parameters
+        ----------
+        layout :
+            Layout specification as described above (nested lists/tuples of
+            ChannelKey or Channel, optionally with None cells).
+        plot_type : str, optional
+            Plot type forwarded to :meth:`Channel.plot` (default "Timehistory").
+        sharex : bool, optional
+            If True (default), subplots share the same x-axis.
+        sharey : bool, optional
+            If True (default), subplots share the same y-axis range.
+        title_suffix : str or None, optional
+            Optional suffix to append to the Test name for the figure title.
+            The title is ``self.name`` if None, or ``f"{self.name}: {title_suffix}"``.
+        make_caption : bool, optional
+            If True, the function also returns a suggested figure caption string
+            as a third return value.
+        **kwargs :
+            Additional keyword arguments forwarded to :meth:`Channel.plot`.
+
+        Returns
+        -------
+        fig : matplotlib.figure.Figure
+            The created Figure.
+        axes : numpy.ndarray
+            2D array of Axes objects with shape (n_rows, n_cols).
+        caption : str, optional
+            If ``make_caption`` is True, a suggested figure caption is returned
+            as a third element.
         """
-        # TODO: create figure/subplots grid, loop over channels and call Channel.plot
-        raise NotImplementedError
+        import matplotlib.pyplot as plt
+        import numpy as np
 
-    def plot_spectra(
+        normalized = self._normalize_layout(layout)
+        n_rows = len(normalized)
+        n_cols = len(normalized[0])
+        fig, axes = plt.subplots(
+            n_rows,
+            n_cols,
+            sharex=sharex,
+            sharey=sharey,
+            squeeze=False,
+        )
+        all_channels: list[Channel] = []
+        for i_row, row in enumerate(normalized):
+            for j_col, cell in enumerate(row):
+                ax = axes[i_row, j_col]
+                if cell is None:
+                    ax.set_visible(False)
+                    continue
+                if isinstance(cell, (list, tuple)):
+                    keys = list(cell)
+                else:
+                    keys = [cell]
+                channels: list[Channel] = []
+                for key in keys:
+                    if isinstance(key, Channel):
+                        ch = key
+                        if ch not in self.channels:
+                            raise ValueError(
+                                "Channel in layout is not part of this Test."
+                            )
+                    else:
+                        ch = self[key]
+                    channels.append(ch)
+                    all_channels.append(ch)
+                multi = len(channels) > 1
+                first = True
+                for ch in channels:
+                    if multi:
+                        ch.plot(
+                            plot_type=plot_type,
+                            name=False,
+                            description=False,
+                            typey=True,
+                            axis=ax,
+                            label=ch.name,
+                            **kwargs,
+                        )
+                    else:
+                        ch.plot(
+                            plot_type=plot_type,
+                            axis=ax,
+                            **kwargs,
+                        )
+                    if first:
+                        first = False
+                if multi:
+                    ax.legend()
+        full_title = (
+            self.name if title_suffix is None else f"{self.name}: {title_suffix}"
+        )
+        fig.suptitle(full_title)
+        caption = ""
+        if make_caption:
+            uniq_channels: list[Channel] = []
+            seen = set()
+            for ch in all_channels:
+                if id(ch) not in seen:
+                    seen.add(id(ch))
+                    uniq_channels.append(ch)
+            channel_names = ", ".join(ch.name for ch in uniq_channels)
+            caption = f"{full_title}. {plot_type} plots of channels: {channel_names}."
+        if make_caption:
+            return fig, axes, caption
+        return fig, axes
+
+    def plot_channels(
         self,
-        selector: ChannelSelector = None,
+        selector: Any,
         *,
-        kind: Literal["fourier", "psd"] = "fourier",
-        fmax: Optional[float] = 50.0,
-        processed: bool = True,
-        use_cache: bool = True,
-        columns: int = 1,
+        ncols: int = 3,
+        plot_type: str = "Timehistory",
         sharex: bool = True,
-        sharey: bool = False,
-        figsize: Optional[Tuple[float, float]] = None,
-        **plot_kwargs: Any,
-    ) -> np.ndarray:
+        sharey: bool = True,
+        title_suffix: str | None = None,
+        make_caption: bool = False,
+        **kwargs: Any,
+    ):
         """
-        Plot Fourier amplitude spectra or Welch PSDs for selected channels.
+        Plot a list of channels from this Test in a grid with a fixed number of columns.
 
-        Delegates to Channel.plot_fourier or Channel.plot_psd.
-        """
-        # TODO: similar layout logic to plot_timehistories, but call spectral plotting methods
-        raise NotImplementedError
+        Channels are selected via the given selector and arranged row-wise into
+        subplots with ``ncols`` columns. This is convenient for plotting many
+        similar channels (e.g. all accelerograms) at once.
 
-    def plot_transfer_function(
-        self,
-        from_ch: ChannelKey,
-        to_ch: ChannelKey,
-        *,
-        method: Literal["H1", "H2"] = "H1",
-        fmax: Optional[float] = None,
-        processed: bool = True,
-        use_cache: bool = True,
-        axes: Optional[Sequence[plt.Axes]] = None,
-        **welch_kwargs: Any,
-    ) -> Sequence[plt.Axes]:
+        Parameters
+        ----------
+        selector :
+            Selector for channels (index, name, list, slice, tag-based selector,
+            etc.) passed to :meth:`iter_channels`.
+        ncols : int, optional
+            Number of subplot columns (default 3).
+        plot_type : str, optional
+            Plot type forwarded to :meth:`Channel.plot` (default "Timehistory").
+        sharex : bool, optional
+            If True (default), subplots share the same x-axis.
+        sharey : bool, optional
+            If True (default), subplots share the same y-axis range.
+        title_suffix : str or None, optional
+            Optional suffix to append to the Test name for the figure title,
+            passed on to :meth:`plot_grid`.
+        make_caption : bool, optional
+            If True, a suggested figure caption string is also returned.
+        **kwargs :
+            Additional keyword arguments forwarded to :meth:`Channel.plot`.
+
+        Returns
+        -------
+        fig : matplotlib.figure.Figure
+            The created Figure.
+        axes : numpy.ndarray
+            2D array of Axes objects with shape (n_rows, ncols).
+        caption : str, optional
+            If ``make_caption`` is True, a suggested figure caption is returned
+            as a third element.
         """
-        Convenience method to plot transfer function magnitude, phase, and coherence
-        between two channels on one or more axes.
-        """
-        # TODO: compute transfer function via self.transfer_function and then plot on axes
-        raise NotImplementedError
+        channels = list(self.iter_channels(selector))
+        if not channels:
+            raise ValueError("No channels selected for plotting.")
+        rows: list[list[Channel]] = []
+        for i in range(0, len(channels), ncols):
+            rows.append(channels[i : i + ncols])
+        return self.plot_grid(
+            rows,
+            plot_type=plot_type,
+            sharex=sharex,
+            sharey=sharey,
+            title_suffix=title_suffix,
+            make_caption=make_caption,
+            **kwargs,
+        )
