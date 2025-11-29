@@ -3,16 +3,25 @@ import warnings
 
 
 def downsample(file_in: str, file_out: str, factor: int = 20) -> None:
-    """Downsample array-like variables in a MATLAB ``.mat`` file.
+    """
+    Downsample array-like variables in a MATLAB ``.mat`` file.
+
+    This function loads a ``.mat`` file, downsamples any array-like
+    variables (NumPy arrays, MATLAB arrays, or objects exposing a ``shape``
+    attribute with ``ndim >= 1``), and writes the result to a new ``.mat``
+    file. Non-array containers such as Python ``list`` or ``tuple`` are left
+    unchanged.
 
     Parameters
     ----------
     file_in : str
-        Path to the input MATLAB ``.mat`` file to read.
+        Path to the input MATLAB ``.mat`` file.
     file_out : str
-        Path to write the downsampled MATLAB ``.mat`` file.
+        Path to the output MATLAB ``.mat`` file where the downsampled
+        variables will be saved.
     factor : int, optional
-        Downsampling factor. Must be a positive integer. Default is 20.
+        Downsampling factor applied along the first dimension. Must be a
+        positive integer. Default is ``20``.
 
     Raises
     ------
@@ -23,10 +32,12 @@ def downsample(file_in: str, file_out: str, factor: int = 20) -> None:
 
     Notes
     -----
-    Only array-like values that expose a ``shape`` attribute and have
-    at least one dimension (``ndim >= 1``) are downsampled. Python lists
-    and tuples are left unchanged so non-numeric containers are not
-    inadvertently modified.
+    * Only objects exposing ``shape`` and having at least one dimension are
+      downsampled. The operation is performed using slicing ``val[::factor]``.
+    * Keys such as ``__header__``, ``__version__`` and ``__globals__`` are
+      preserved and written unchanged.
+    * SciPy warnings related to MATLAB struct fields beginning with an
+      underscore are suppressed during saving.
     """
     if not isinstance(factor, int) or factor <= 0:
         raise ValueError(f"factor must be a positive integer, got {factor!r}")
@@ -45,7 +56,7 @@ def downsample(file_in: str, file_out: str, factor: int = 20) -> None:
         if hasattr(val, "shape") and getattr(val, "ndim", 0) >= 1:
             imported_data[key] = val[::factor]
 
-    # Silence SciPy's MAT-file warnings about __header__/__version__/__globals__
+    # Silence SciPy's warnings about __header__/__version__/__globals__
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",

@@ -29,7 +29,8 @@ ChannelSelector = Union[ChannelKey, Sequence[ChannelKey], slice, None]
 
 @dataclass
 class Test:
-    """Container for an experiment composed of multiple time-history channels.
+    """
+    Container for an experiment composed of multiple time-history channels.
 
     The ``Test`` object stores an ordered list of :class:`Channel` instances
     together with test-level metadata (name, description, source file,
@@ -45,12 +46,12 @@ class Test:
     description : str, optional
         Longer description of the test.
     source_file : str, optional
-        Path or identifier of the primary data file used to build this Test.
+        Path or identifier of the primary data file used to build this test.
     timestamp : str, optional
         String representation of the test date/time.
-    channels : list[Channel], optional
-        Ordered list of :class:`Channel` objects belonging to this Test.
-    tags : set[str], optional
+    channels : list of Channel, optional
+        Ordered list of :class:`Channel` objects belonging to this test.
+    tags : set of str, optional
         Free-form tags for grouping and filtering tests.
     meta : dict, optional
         Free-form metadata dictionary.
@@ -81,6 +82,17 @@ class Test:
     def __post_init__(self) -> None:
         """
         Normalise internal containers and enforce basic type assumptions.
+
+        Notes
+        -----
+        This method is called automatically after dataclass initialisation.
+        It ensures that:
+
+        * ``channels`` is a list of :class:`Channel` objects.
+        * ``tags`` is stored as a set.
+        * ``meta`` is stored as a plain dictionary.
+        * If ``name`` is empty and ``source_file`` is provided, a name is
+          derived from the file stem.
         """
         # Always store channels as a list of Channel objects
         self.channels = list(self.channels)
@@ -102,17 +114,38 @@ class Test:
 
     def __len__(self) -> int:
         """
-        Number of channels in this Test.
-        For the full (channels, timesteps) shape, use `test.shape`.
+        Return the number of channels in this test.
+
+        Notes
+        -----
+        For the full ``(n_channels, n_timesteps)`` shape, use ``test.shape``.
         """
         return len(self.channels)
 
     def __getitem__(self, key) -> Channel:
         """
-        Channel lookup by index or name.
+        Return a channel by index or name.
 
-        - int  -> position in the channels list (0-based)
-        - str  -> match against Channel.name_user or Channel.name_input
+        Parameters
+        ----------
+        key : int or str
+            Channel selector:
+
+            * int : position in the channels list (0-based).
+            * str : matched against ``Channel.name_user`` or
+              ``Channel.name_input`` (case-insensitive exact match).
+
+        Returns
+        -------
+        Channel
+            The selected :class:`Channel` instance.
+
+        Raises
+        ------
+        KeyError
+            If no channel matches a given string key.
+        TypeError
+            If ``key`` is neither an integer nor a string.
         """
         # Integer index
         if isinstance(key, int):
@@ -140,25 +173,41 @@ class Test:
         require_all_tags: bool = False,
     ) -> Iterable[Channel]:
         """
-        Iterate over channels selected by index / name / slice / list,
-        with optional filtering by channel tags.
+        Iterate over channels selected by index/name and optional tags.
 
         Parameters
         ----------
-        selector :
+        selector : ChannelSelector, optional
             How to pick the initial set of channels:
-            - None        -> all channels
-            - int         -> single channel by index
-            - str         -> single channel by name (via __getitem__)
-            - Channel     -> that channel (if it belongs to this Test)
-            - slice       -> slice of the channels list
-            - Sequence[...] of the above
-        tags :
-            Optional iterable of tag strings. If provided, only channels whose
-            `ch.tags` intersect (or contain) these will be yielded.
-        require_all_tags :
-            - False (default): channel is kept if it has *any* of the requested tags.
-            - True: channel is kept only if it has *all* of the requested tags.
+
+            * ``None`` (default) : all channels.
+            * int : single channel by index.
+            * str : single channel by name (via ``__getitem__``).
+            * Channel : that channel (if it belongs to this test).
+            * slice : slice of the channels list.
+            * Sequence[...] : sequence of any of the above.
+        tags : iterable of str, optional
+            If provided, only channels whose ``ch.tags`` intersect (or
+            contain) these will be yielded.
+        require_all_tags : bool, optional
+            Tag matching rule:
+
+            * ``False`` (default) : keep channel if it has *any* of the
+              requested tags.
+            * ``True`` : keep channel only if it has *all* requested tags.
+
+        Yields
+        ------
+        Channel
+            Channels matching the selector and tag conditions.
+
+        Raises
+        ------
+        TypeError
+            If ``selector`` has an unsupported type.
+        ValueError
+            If a :class:`Channel` passed in ``selector`` does not belong
+            to this :class:`Test`.
         """
         # Resolve the base set from `selector`
         if selector is None:
@@ -206,15 +255,18 @@ class Test:
 
     def channel_names(self) -> list[str]:
         """
-        Return a list of preferred channel names for this Test.
+        Return a list of preferred channel names for this test.
 
         For each channel the priority is:
-        - name_user
-        - name_input
-        - fallback: 'ch{index}' (e.g. 'ch0', 'ch1', ...)
 
-        This is useful for quick inspection and for knowing what
-        string keys you can use with test.channel["..."].
+        * ``name_user``
+        * ``name_input``
+        * fallback: ``"ch{index}"`` (e.g. ``"ch0"``, ``"ch1"``, ...)
+
+        Returns
+        -------
+        list of str
+            List of channel names in the same order as ``self.channels``.
         """
         names: list[str] = []
         for i, ch in enumerate(self.channels):
@@ -233,20 +285,26 @@ class Test:
     @property
     def channel(self) -> "Test":
         """
-        Convenience view over this Test's channels.
+        Convenience view over this test's channels.
 
-        Allows:
-            test.channel[3]        -> 4th Channel (by index)
-            test.channel["Acc1"]   -> Channel with matching name_input/name_user
+        This property allows access patterns such as::
 
-        The underlying list is still available as `test.channels`.
+            test.channel[3]       # 4th Channel (by index)
+            test.channel["Acc1"]  # Channel with matching name_input/name_user
+
+        The underlying list is still available as ``test.channels``.
         """
         return self
 
     @property
     def n_channels(self) -> int:
         """
-        Return the number of channels.
+        Return the number of channels in the test.
+
+        Returns
+        -------
+        int
+            Number of channels.
         """
         return len(self.channels)
 
@@ -254,6 +312,11 @@ class Test:
     def n_timesteps(self) -> int:
         """
         Return the number of timesteps (samples) per channel.
+
+        Returns
+        -------
+        int
+            Number of time samples in each channel.
 
         Raises
         ------
@@ -276,14 +339,24 @@ class Test:
     @property
     def shape(self) -> tuple[int, int]:
         """
-        Return the (n_channels, n_timesteps) shape of this Test.
+        Return the ``(n_channels, n_timesteps)`` shape of this test.
+
+        Returns
+        -------
+        tuple of int
+            Tuple ``(n_channels, n_timesteps)``.
         """
         return (self.n_channels, self.n_timesteps)
 
     @property
     def duration(self) -> float:
         """
-        Total duration of the test, in seconds.
+        Return the total duration of the test in seconds.
+
+        Returns
+        -------
+        float
+            Total duration of the test.
 
         Raises
         ------
@@ -308,12 +381,18 @@ class Test:
     @property
     def dt(self) -> float:
         """
-        Sampling interval of the test, in seconds.
+        Return the sampling interval of the test in seconds.
+
+        Returns
+        -------
+        float
+            Sampling interval ``dt`` in seconds.
 
         Raises
         ------
         ValueError
-            If channels have inconsistent dt values.
+            If the test has no channels or if channels have inconsistent
+            ``dt`` values.
         """
         if not self.channels:
             raise ValueError("Cannot determine dt: this Test has no channels.")
@@ -333,9 +412,15 @@ class Test:
 
     def info(self) -> str:
         """
-        Return a human-readable summary of this Test and its channels.
+        Return a human-readable summary of this test and its channels.
 
-        The returned string is not auto-printed; use print(test.info())
+        The summary includes basic test-level metadata, sampling information,
+        and a small table of channel-level fields.
+
+        Returns
+        -------
+        str
+            Multi-line string summary (not printed automatically).
         """
         lines: list[str] = []
         # Test-level metadata
@@ -422,30 +507,35 @@ class Test:
         meta: Optional[Mapping[str, Any]] = None,
     ) -> "Test":
         """
-        Construct a Test directly from an existing sequence of Channel objects.
+        Construct a test directly from an existing sequence of channels.
 
         Parameters
         ----------
-        name :
-            Human-readable name for this test (e.g. 'Test 07').
-        channels :
-            Sequence of Channel instances to include in the test.
-        description :
-            Optional description of the experiment.
-        source_file :
-            Optional path or identifier of the original data file.
-        timestamp :
-            Optional timestamp string for the experiment.
-        tags :
-            Optional iterable of test-level tags (e.g. {'sofsi', 'equals'}).
-        meta :
-            Optional additional metadata map (e.g. {'specimen_id': 'ABC123'}).
+        name : str
+            Human-readable name for this test (e.g. ``"Test 07"``).
+        channels : sequence of Channel
+            Sequence of :class:`Channel` instances to include in the test.
+        description : str, optional
+            Description of the experiment.
+        source_file : str, optional
+            Path or identifier of the original data file.
+        timestamp : str, optional
+            Timestamp string for the experiment.
+        tags : iterable of str, optional
+            Iterable of test-level tags (e.g. ``{"sofsi", "equals"}``).
+        meta : mapping, optional
+            Additional metadata (e.g. ``{"specimen_id": "ABC123"}``).
+
+        Returns
+        -------
+        Test
+            New :class:`Test` instance.
 
         Notes
         -----
         This is a thin convenience wrapper around the dataclass constructor:
-        it normalises `channels`, `tags`, and `meta` into the expected container
-        types and lets `__post_init__` do the remaining validation.
+        it normalises ``channels``, ``tags`` and ``meta`` into the expected
+        container types and lets ``__post_init__`` do the remaining validation.
         """
         # Normalise containers
         channels_list = list(channels)
@@ -472,36 +562,53 @@ class Test:
         meta: Optional[Mapping[str, Any]] = None,
     ) -> "Test":
         """
-        Construct a Test from a SoFSI-style MATLAB .mat file.
+        Construct a test from a SoFSI-style MATLAB ``.mat`` file.
 
         Expected format
         ---------------
-        Required:
-            Channel_1_Data       : 1D time vector (s)
-            Channel_i_Data       : 1D data arrays, i >= 2
+        Required
+            ``Channel_1_Data`` : 1D time vector (s)
+            ``Channel_i_Data`` : 1D data arrays, ``i >= 2``
 
-        Optional:
-            File_Header          : struct with any subset of:
-                                NumberOfChannels, NumberOfSamplesPerChannel,
-                                SampleFrequency, Date, Comment,
-                                NumberOfSamplesPerBlock, ...
-            Channel_i_Header     : structs with fields SignalName, Unit,
-                                MaxLevel, Correction, ...
+        Optional
+            ``File_Header`` : struct with any subset of::
 
-        Header fields are used only for metadata.
+                NumberOfChannels, NumberOfSamplesPerChannel,
+                SampleFrequency, Date, Comment,
+                NumberOfSamplesPerBlock, ...
+
+            ``Channel_i_Header`` : structs with fields::
+
+                SignalName, Unit, MaxLevel, Correction, ...
+
+        Header fields are used only for metadata; missing fields are ignored.
 
         Parameters
         ----------
-        filename :
+        filename : str
             Path to the MAT file.
-        name :
-            Optional test name. If not given, the stem of `filename` is used.
-        description :
-            Optional description. If not given, defaults to `name`.
-        tags :
-            Optional iterable of test-level tags (e.g. {"demo"}).
-        meta :
-            Optional mapping to initialise Test.meta with (e.g. {"specimen": "ABC"}).
+        name : str, optional
+            Test name. If not given, the stem of ``filename`` is used.
+        description : str, optional
+            Description of the test. If not given, defaults to ``name``.
+        tags : iterable of str, optional
+            Iterable of test-level tags (e.g. ``{"demo"}``).
+        meta : mapping, optional
+            Mapping used to initialise ``Test.meta`` (e.g. ``{"specimen": "ABC"}``).
+
+        Returns
+        -------
+        Test
+            New :class:`Test` instance built from the MAT file.
+
+        Raises
+        ------
+        FileNotFoundError
+            If ``filename`` cannot be found.
+        KeyError
+            If the expected time channel ``"Channel_1_Data"`` is missing.
+        ValueError
+            If time or data arrays have incompatible shapes.
         """
         try:
             imported_data = sp.io.loadmat(
@@ -646,32 +753,47 @@ class Test:
         meta: Optional[Mapping[str, Any]] = None,
     ) -> "Test":
         """
-        Construct a Test from an EQUALS-style MATLAB .mat file.
+        Construct a test from an EQUALS-style MATLAB ``.mat`` file.
 
         Expected format
         ---------------
-        Required:
-            t       : 1D numeric time vector (s)
-            output  : 2D numeric array, shape (n_samples, n_channels)
+        Required
+            ``t``      : 1D numeric time vector (s)
+            ``output`` : 2D numeric array, shape ``(n_samples, n_channels)``
 
-        Optional:
-            Testdate, Time, Frequency, Points, No_Channels, File_name,
-            Buffer_Size, sampling, Filter, P_ref, ...
+        Optional
+            ``Testdate``, ``Time``, ``Frequency``, ``Points``, ``No_Channels``,
+            ``File_name``, ``Buffer_Size``, ``sampling``, ``Filter``, ``P_ref``, ...
 
-        Header fields are used only for metadata.
+        Header fields are used only for metadata; missing fields are ignored.
 
         Parameters
         ----------
-        filename :
+        filename : str
             Path to the MAT file.
-        name :
-            Optional test name. If not given, the stem of `filename` is used.
-        description :
-            Optional description. If not given, defaults to `name`.
-        tags :
-            Optional iterable of test-level tags (e.g. {"demo"}).
-        meta :
-            Optional mapping to initialise Test.meta with (e.g. {"specimen": "ABC"}).
+        name : str, optional
+            Test name. If not given, the stem of ``filename`` is used.
+        description : str, optional
+            Description of the test. If not given, defaults to ``name``.
+        tags : iterable of str, optional
+            Iterable of test-level tags (e.g. ``{"demo"}``).
+        meta : mapping, optional
+            Mapping to initialise ``Test.meta`` with
+            (e.g. ``{"specimen": "ABC"}``).
+
+        Returns
+        -------
+        Test
+            New :class:`Test` instance built from the MAT file.
+
+        Raises
+        ------
+        FileNotFoundError
+            If ``filename`` cannot be found.
+        KeyError
+            If required variables ``"t"`` or ``"output"`` are missing.
+        ValueError
+            If inputs have incompatible shapes.
         """
         try:
             imported_data = sp.io.loadmat(
@@ -775,27 +897,38 @@ class Test:
         meta: Optional[Mapping[str, Any]] = None,
     ) -> "Test":
         """
-        Construct a Test from a CSV file.
+        Construct a test from a CSV file in wide format.
 
         Expected format
         ---------------
-        - First row is a header.
-        - First column is time ('Time').
-        - Remaining columns are channels.
-        - All values are numeric.
+        * First row is a header.
+        * First column is time (header ``"Time"``).
+        * Remaining columns are channels.
+        * All values are numeric.
 
         Parameters
         ----------
-        filename :
+        filename : str
             Path to the CSV file.
-        name :
-            Optional test name. If not given, the stem of `filename` is used.
-        description :
-            Optional description. If not given, defaults to `name`.
-        tags :
-            Optional iterable of test-level tags (e.g. {"csv", "demo"}).
-        meta :
-            Optional mapping to initialise Test.meta with (e.g. {"specimen": "ABC"}).
+        name : str, optional
+            Test name. If not given, the stem of ``filename`` is used.
+        description : str, optional
+            Description of the test. If not given, defaults to ``name``.
+        tags : iterable of str, optional
+            Iterable of test-level tags (e.g. ``{"csv", "demo"}``).
+        meta : mapping, optional
+            Mapping used to initialise ``Test.meta`` with
+            (e.g. ``{"specimen": "ABC"}``).
+
+        Returns
+        -------
+        Test
+            New :class:`Test` instance built from the CSV file.
+
+        Raises
+        ------
+        ValueError
+            If the header is missing or the required time column is not present.
         """
         with open(filename, newline="") as f:
             reader = csv.reader(f)
@@ -851,21 +984,34 @@ class Test:
         overwrite: bool = True,
     ) -> None:
         """
-        Export selected channels to a CSV file:
+        Export selected channels to a CSV file (wide format).
+
+        The output has the form::
+
             Time, Ch1, Ch2, ...
 
         Parameters
         ----------
         filename : str
             Output CSV file path.
-        selector :
-            Which channels to export (index, name, list, slice…). If None,
-            all channels are exported.
-        include_axis_labels : bool
-            If True, use channel.name_user (preferred) or channel.name_input
-            as column names. Otherwise fallback to Ch1, Ch2, ...
-        overwrite : bool
-            If False and file exists, raise an error.
+        selector : ChannelSelector, optional
+            Channels to export (index, name, list, slice, etc.).
+            If ``None`` (default), all channels are exported.
+        include_axis_labels : bool, optional
+            If ``True`` (default), use ``channel.label_axis`` (preferred),
+            ``channel.name_user`` or ``channel.name_input`` as column names.
+            Otherwise fallback to ``"Ch1"``, ``"Ch2"``, ...
+        overwrite : bool, optional
+            If ``False`` and the file already exists, a
+            :class:`FileExistsError` is raised.
+
+        Raises
+        ------
+        FileExistsError
+            If ``overwrite`` is ``False`` and the file exists.
+        ValueError
+            If no channels are selected or if selected channels do not share
+            the same time vector.
         """
         # Check overwrite
         if os.path.exists(filename) and not overwrite:
@@ -913,9 +1059,19 @@ class Test:
         Export channel metadata to CSV (one row per channel).
 
         Columns are written only if they contain non-identical data
-        across channels. This avoids redundant storage.
+        across channels, to avoid redundant storage.
 
-        Always included: idx
+        Notes
+        -----
+        The column ``"idx"`` (channel index) is always included.
+
+        Parameters
+        ----------
+        filename : str
+            Output CSV file path.
+        overwrite : bool, optional
+            If ``False`` and the file exists, a :class:`FileExistsError`
+            is raised. Default is ``True``.
         """
         if os.path.exists(filename) and not overwrite:
             raise FileExistsError(
@@ -962,13 +1118,36 @@ class Test:
 
     def with_channel_info_from_csv(self, filename: str) -> "Test":
         """
-        Return a new Test with channel metadata updated from CSV.
+        Return a new test with channel metadata updated from CSV.
 
-        - Header matching is flexible: underscores/spaces/upper/lower-case ignored.
-        - Any row that cannot be matched → ValueError.
-        - Matching priority: idx column → name_user/name_input.
+        Header matching is flexible (underscores/spaces and case are ignored),
+        and rows are matched to channels as follows:
 
-        Only metadata is updated; data/processing unchanged.
+        1. If an ``idx`` column is present, it is used first.
+        2. Otherwise, matching is attempted against ``name_user`` or
+           ``name_input`` (case-insensitive).
+
+        Any row that cannot be matched raises a :class:`ValueError`.
+        Only metadata is updated; data and processing parameters are
+        left unchanged.
+
+        Parameters
+        ----------
+        filename : str
+            Path to the CSV file produced e.g. by ``channel_info_to_csv``.
+
+        Returns
+        -------
+        Test
+            New :class:`Test` instance with updated channel metadata.
+
+        Raises
+        ------
+        FileNotFoundError
+            If ``filename`` does not exist.
+        ValueError
+            If the CSV is empty, has no recognised columns, or a row cannot
+            be matched to any channel.
         """
         if not os.path.exists(filename):
             raise FileNotFoundError(filename)
@@ -1098,10 +1277,24 @@ class Test:
 
     def add_channel(self, ch: Channel) -> "Test":
         """
-        Return a new Test with `ch` appended to the channels list.
+        Return a new test with a channel appended to the channel list.
 
-        Functional style: Test is treated as immutable; this method returns
-        a new instance rather than mutating in place.
+        The original :class:`Test` instance is left unchanged.
+
+        Parameters
+        ----------
+        ch : Channel
+            Channel instance to append.
+
+        Returns
+        -------
+        Test
+            New :class:`Test` instance with one extra channel.
+
+        Raises
+        ------
+        TypeError
+            If ``ch`` is not a :class:`Channel` instance.
         """
         if not isinstance(ch, Channel):
             raise TypeError("add_channel expects a Channel instance.")
@@ -1119,14 +1312,29 @@ class Test:
 
     def drop_channels(self, selector: ChannelSelector) -> "Test":
         """
-        Return a new Test with the selected channels removed.
+        Return a new test with the selected channels removed.
 
-        The selector can be anything accepted by `iter_channels`, e.g.:
-        - int           -> index
-        - str           -> name (name_user / name_input)
-        - Channel       -> that channel
-        - slice         -> slice of the channels list
-        - Sequence[...] -> list of the above
+        Parameters
+        ----------
+        selector : ChannelSelector
+            Channels to remove. Can be anything accepted by
+            :meth:`iter_channels`, e.g.:
+
+            * int : index.
+            * str : name (``name_user`` / ``name_input``).
+            * Channel : that channel.
+            * slice : slice of the channels list.
+            * Sequence[...] : list of the above.
+
+        Returns
+        -------
+        Test
+            New :class:`Test` instance with selected channels removed.
+
+        Raises
+        ------
+        ValueError
+            If ``selector`` is ``None``.
         """
         if selector is None:
             raise ValueError("drop_channels requires a non-None selector.")
@@ -1154,22 +1362,29 @@ class Test:
         **override: Any,
     ) -> "Test":
         """
-        Return a new Test where selected channels are replaced by
-        their drift-corrected versions (using Channel.drift_corrected).
+        Return a new test with drift-corrected versions of selected channels.
+
+        This applies :meth:`Channel.drift_corrected` to the selected
+        channels and leaves the others unchanged.
 
         Parameters
         ----------
-        selector :
-            Which channels to process (index, name, Channel, list, slice…).
-            If None (default), all channels are processed.
-        **override :
-            Keyword arguments forwarded to Channel.drift_corrected, e.g.
-            ``points=100``. These override the stored drift parameters.
+        selector : ChannelSelector, optional
+            Channels to process (index, name, :class:`Channel`, list, slice…).
+            If ``None`` (default), all channels are processed.
+        **override
+            Keyword arguments forwarded to :meth:`Channel.drift_corrected`,
+            e.g. ``points=100``. These override stored drift parameters.
 
         Returns
         -------
         Test
-            New Test instance with updated channels.
+            New :class:`Test` instance with updated channels.
+
+        Raises
+        ------
+        ValueError
+            If no channels are selected for drift correction.
         """
         if selector is None:
             selected = list(self.channels)
@@ -1199,23 +1414,29 @@ class Test:
         **override: Any,
     ) -> "Test":
         """
-        Return a new Test where selected channels are replaced by
-        their filtered versions (using Channel.filtered).
+        Return a new test with filtered versions of selected channels.
+
+        This applies :meth:`Channel.filtered` to the selected channels.
 
         Parameters
         ----------
-        selector :
-            Which channels to process (index, name, Channel, list, slice…).
-            If None (default), all channels are processed.
-        **override :
-            Keyword arguments forwarded to Channel.filtered, e.g.
+        selector : ChannelSelector, optional
+            Channels to process (index, name, :class:`Channel`, list, slice…).
+            If ``None`` (default), all channels are processed.
+        **override
+            Keyword arguments forwarded to :meth:`Channel.filtered`, e.g.
             ``btype="highpass"``, ``fc=0.5``, ``order=4``. These override
             the stored filter parameters.
 
         Returns
         -------
         Test
-            New Test instance with updated channels.
+            New :class:`Test` instance with updated channels.
+
+        Raises
+        ------
+        ValueError
+            If no channels are selected for filtering.
         """
         if selector is None:
             selected = list(self.channels)
@@ -1245,22 +1466,29 @@ class Test:
         **override: Any,
     ) -> "Test":
         """
-        Return a new Test where selected channels are replaced by
-        baseline-corrected versions (using Channel.baseline_corrected).
+        Return a new test with baseline-corrected selected channels.
+
+        This applies :meth:`Channel.baseline_corrected` to the selected
+        channels.
 
         Parameters
         ----------
-        selector :
-            Which channels to process (index, name, Channel, list, slice…).
-            If None (default), all channels are processed.
-        **override :
-            Keyword arguments forwarded to Channel.baseline_corrected, e.g.
-            ``type="linear"``. These override the stored baseline parameters.
+        selector : ChannelSelector, optional
+            Channels to process (index, name, :class:`Channel`, list, slice…).
+            If ``None`` (default), all channels are processed.
+        **override
+            Keyword arguments forwarded to :meth:`Channel.baseline_corrected`,
+            e.g. ``type="linear"``. These override stored baseline parameters.
 
         Returns
         -------
         Test
-            New Test instance with updated channels.
+            New :class:`Test` instance with updated channels.
+
+        Raises
+        ------
+        ValueError
+            If no channels are selected for baseline correction.
         """
         if selector is None:
             selected = list(self.channels)
@@ -1290,25 +1518,30 @@ class Test:
         **override: Any,
     ) -> "Test":
         """
-        Return a new Test where selected channels are replaced by
-        trimmed versions (using Channel.trimmed).
+        Return a new test with manually trimmed selected channels.
 
         This is the generic manual-window trimming interface based on
-        explicit ``t_start`` / ``t_end`` (in seconds).
+        explicit ``t_start`` and ``t_end`` (in seconds), using
+        :meth:`Channel.trimmed`.
 
         Parameters
         ----------
-        selector :
-            Which channels to process (index, name, Channel, list, slice…).
-            If None (default), all channels are processed.
-        **override :
-            Keyword arguments forwarded to Channel.trimmed, typically
+        selector : ChannelSelector, optional
+            Channels to process (index, name, :class:`Channel`, list, slice…).
+            If ``None`` (default), all channels are processed.
+        **override
+            Keyword arguments forwarded to :meth:`Channel.trimmed`, typically
             including ``t_start`` and ``t_end`` (in seconds).
 
         Returns
         -------
         Test
-            New Test instance with updated channels.
+            New :class:`Test` instance with updated channels.
+
+        Raises
+        ------
+        ValueError
+            If no channels are selected for trimming.
         """
         if selector is None:
             selected = list(self.channels)
@@ -1344,50 +1577,67 @@ class Test:
         use_cache: bool = True,
     ) -> "Test":
         """
-        Return a new Test where selected channels are trimmed using a single
-        time window derived from one reference channel and a threshold
-        criterion.
+        Return a new test with threshold-based aligned trimming.
+
+        A single time window is derived from one reference channel using
+        :meth:`Channel.trim_by_threshold`, and then applied to all
+        selected channels.
 
         Strategy
         --------
-        - Choose a reference channel:
-            * If `ref` is given, use that (must belong to this Test and
-              be part of the selected set).
-            * Otherwise, use the first selected channel.
-        - On the reference channel, compute a threshold-based window via
-          Channel.trim_by_threshold.
-        - Extract (t_start, t_end) from the reference channel's trim_params.
-        - Apply Channel.trimmed(t_start, t_end) to all selected channels.
+        * Choose a reference channel:
+
+          - If ``ref`` is given, use that (must belong to this test and
+            be part of the selected set).
+          - Otherwise, use the first selected channel.
+
+        * On the reference channel, compute a threshold-based window via
+          :meth:`Channel.trim_by_threshold`.
+        * Extract ``t_start`` and ``t_end`` from the reference channel's
+          ``trim_params``.
+        * Apply :meth:`Channel.trimmed` with this window to all selected
+          channels.
 
         Parameters
         ----------
-        selector :
-            Which channels to trim (index, name, Channel, list, slice…).
-            If None (default), all channels are trimmed.
-        ref :
+        selector : ChannelSelector, optional
+            Channels to trim (index, name, :class:`Channel`, list, slice…).
+            If ``None`` (default), all channels are trimmed.
+        ref : ChannelKey, optional
             Reference channel used to define the trim window. Can be an
-            index, name, or Channel instance. If None, the first selected
-            channel is used. The reference must be part of the selected set.
-        threshold :
+            index, name, or :class:`Channel` instance. If ``None``, the
+            first selected channel is used. The reference must be part of
+            the selected set.
+        threshold : float, optional
             Threshold value in signal units used to detect when the motion
-            starts/stops (see Channel.trim_by_threshold).
-        use_abs :
-            If True, thresholding is applied to abs(signal). If False,
-            thresholding is applied to the raw signal.
-        buffer_before, buffer_after :
-            Time buffers (in seconds) to extend the window before/after
-            the detected start/end times.
-        processed :
+            starts/stops (see :meth:`Channel.trim_by_threshold`).
+        use_abs : bool, optional
+            If ``True`` (default), thresholding is applied to
+            ``abs(signal)``. If ``False``, thresholding is applied to the
+            raw signal.
+        buffer_before : float, optional
+            Time buffer (in seconds) to extend the window before the
+            detected start time.
+        buffer_after : float, optional
+            Time buffer (in seconds) to extend the window after the
+            detected end time.
+        processed : bool, optional
             Whether to use processed data for the reference channel when
-            computing the window.
-        use_cache :
-            Whether to use the Channel-level processing cache for the
-            reference channel.
+            computing the window. Default is ``True``.
+        use_cache : bool, optional
+            Whether to use the channel-level processing cache for the
+            reference channel. Default is ``True``.
 
         Returns
         -------
         Test
-            New Test instance with aligned trimming across channels.
+            New :class:`Test` instance with aligned trimming across channels.
+
+        Raises
+        ------
+        ValueError
+            If no channels are selected, if the reference channel is not
+            part of this test, or if it is not in the selected set.
         """
         # Resolve selected channels
         if selector is None:
@@ -1449,46 +1699,64 @@ class Test:
         use_cache: bool = True,
     ) -> "Test":
         """
-        Return a new Test where selected channels are trimmed to a single
-        time window derived from a fraction-of-peak criterion on one
-        reference channel.
+        Return a new test with fraction-of-peak aligned trimming.
+
+        A single time window is derived from a fraction-of-peak criterion
+        on one reference channel using
+        :meth:`Channel.trim_by_fraction_of_peak`, and then applied to all
+        selected channels.
 
         Strategy
         --------
-        - Choose a reference channel (like trimmed_by_threshold).
-        - On the reference channel, compute the window via
-          Channel.trim_by_fraction_of_peak.
-        - Extract (t_start, t_end) from the reference channel's trim_params.
-        - Apply Channel.trimmed(t_start, t_end) to all selected channels.
+        * Choose a reference channel (as in
+          :meth:`trimmed_by_threshold`).
+        * On the reference channel, compute the window via
+          :meth:`Channel.trim_by_fraction_of_peak`.
+        * Extract ``t_start`` and ``t_end`` from the reference channel's
+          ``trim_params``.
+        * Apply :meth:`Channel.trimmed` with this window to all selected
+          channels.
 
         Parameters
         ----------
-        selector :
-            Which channels to trim (index, name, Channel, list, slice…).
-            If None (default), all channels are trimmed.
-        ref :
+        selector : ChannelSelector, optional
+            Channels to trim (index, name, :class:`Channel`, list, slice…).
+            If ``None`` (default), all channels are trimmed.
+        ref : ChannelKey, optional
             Reference channel used to define the trim window. Can be an
-            index, name, or Channel instance. If None, the first selected
-            channel is used. The reference must be part of the selected set.
-        fraction :
-            Fraction of the peak amplitude in (0, 1] used to define the
-            effective-motion window (see Channel.trim_by_fraction_of_peak).
-        use_abs :
-            If True, use absolute amplitude when computing the peak.
-        buffer_before, buffer_after :
-            Time buffers (in seconds) to extend the window before/after
-            the detected start/end times.
-        processed :
+            index, name, or :class:`Channel` instance. If ``None``, the
+            first selected channel is used. The reference must be part of
+            the selected set.
+        fraction : float, optional
+            Fraction of the peak amplitude in ``(0, 1]`` used to define the
+            effective-motion window (see
+            :meth:`Channel.trim_by_fraction_of_peak`).
+        use_abs : bool, optional
+            If ``True`` (default), use absolute amplitude when computing the
+            peak.
+        buffer_before : float, optional
+            Time buffer (in seconds) to extend the window before the
+            detected start time.
+        buffer_after : float, optional
+            Time buffer (in seconds) to extend the window after the detected
+            end time.
+        processed : bool, optional
             Whether to use processed data for the reference channel when
             computing the window.
-        use_cache :
-            Whether to use the Channel-level processing cache for the
+        use_cache : bool, optional
+            Whether to use the channel-level processing cache for the
             reference channel.
 
         Returns
         -------
         Test
-            New Test instance with aligned trimming across channels.
+            New :class:`Test` instance with aligned trimming across channels.
+
+        Raises
+        ------
+        ValueError
+            If no channels are selected, if the reference channel is not
+            part of this test, or if it is not in the selected set.
         """
         # Resolve selected channels
         if selector is None:
@@ -1551,46 +1819,64 @@ class Test:
         use_cache: bool = True,
     ) -> "Test":
         """
-        Return a new Test where selected channels are trimmed to a single
-        Arias-intensity significant-duration window derived from one
-        reference channel (e.g. 5–95% of Arias intensity).
+        Return a new test with Arias-intensity-based aligned trimming.
+
+        A single significant-duration window is derived from one reference
+        channel using :meth:`Channel.trim_by_arias`, and then applied to
+        all selected channels.
 
         Strategy
         --------
-        - Choose a reference channel (like trimmed_by_threshold).
-        - On the reference channel, compute the Arias-based window via
-          Channel.trim_by_arias.
-        - Extract (t_start, t_end) from the reference channel's trim_params.
-        - Apply Channel.trimmed(t_start, t_end) to all selected channels.
+        * Choose a reference channel (as in
+          :meth:`trimmed_by_threshold`).
+        * On the reference channel, compute the Arias-based window via
+          :meth:`Channel.trim_by_arias`.
+        * Extract ``t_start`` and ``t_end`` from the reference channel's
+          ``trim_params``.
+        * Apply :meth:`Channel.trimmed` with this window to all selected
+          channels.
 
         Parameters
         ----------
-        selector :
-            Which channels to trim (index, name, Channel, list, slice…).
-            If None (default), all channels are trimmed.
-        ref :
+        selector : ChannelSelector, optional
+            Channels to trim (index, name, :class:`Channel`, list, slice…).
+            If ``None`` (default), all channels are trimmed.
+        ref : ChannelKey, optional
             Reference channel used to define the trim window. Can be an
-            index, name, or Channel instance. If None, the first selected
-            channel is used. The reference must be part of the selected set.
-        lower, upper :
-            Lower and upper fractions of Arias intensity (in [0, 1]) that
-            define the significant-duration window, typically 0.05 and 0.95.
-        g :
-            Gravitational acceleration used for Arias intensity, in m/s^2.
-        buffer_before, buffer_after :
-            Time buffers (in seconds) to extend the window before/after
-            the detected lower/upper times.
-        processed :
+            index, name, or :class:`Channel` instance. If ``None``, the
+            first selected channel is used. The reference must be part of
+            the selected set.
+        lower : float, optional
+            Lower fraction of Arias intensity in ``[0, 1]`` that defines
+            the start of the significant-duration window (typically 0.05).
+        upper : float, optional
+            Upper fraction of Arias intensity in ``[0, 1]`` that defines
+            the end of the significant-duration window (typically 0.95).
+        g : float, optional
+            Gravitational acceleration in m/s² used for Arias intensity.
+        buffer_before : float, optional
+            Time buffer (in seconds) to extend the window before the
+            detected lower time.
+        buffer_after : float, optional
+            Time buffer (in seconds) to extend the window after the
+            detected upper time.
+        processed : bool, optional
             Whether to use processed data for the reference channel when
             computing the window.
-        use_cache :
-            Whether to use the Channel-level processing cache for the
+        use_cache : bool, optional
+            Whether to use the channel-level processing cache for the
             reference channel.
 
         Returns
         -------
         Test
-            New Test instance with aligned trimming across channels.
+            New :class:`Test` instance with aligned trimming across channels.
+
+        Raises
+        ------
+        ValueError
+            If no channels are selected, if the reference channel is not
+            part of this test, or if it is not in the selected set.
         """
         # Resolve selected channels
         if selector is None:
@@ -1654,29 +1940,38 @@ class Test:
         **kwargs: Any,
     ) -> tuple[np.ndarray, np.ndarray]:
         """
-        Compute the cross power spectral density (CPSD) between two channels using ``scipy.signal.csd``.
+        Compute the cross power spectral density (CPSD) between two channels.
+
+        The CPSD is computed using :func:`scipy.signal.csd`.
 
         Parameters
         ----------
-        x :
-            Input (excitation) channel key (index, name or Channel instance).
-        y :
-            Output (response) channel key (index, name or Channel instance).
+        x : ChannelKey
+            Input (excitation) channel key (index, name or :class:`Channel`).
+        y : ChannelKey
+            Output (response) channel key (index, name or :class:`Channel`).
         processed : bool, optional
-            If True (default), use processed data from each channel.
+            If ``True`` (default), use processed data from each channel.
         use_cache : bool, optional
-            If True (default), use the Channel-level processing cache.
-        **kwargs :
-            Additional keyword arguments forwarded to ``scipy.signal.csd``,
-            e.g. ``nperseg``, ``window``, ``noverlap``.
-            If ``nperseg`` is not given, a MATLAB-like default of ``min(256, n)`` is used.
+            If ``True`` (default), use the channel-level processing cache.
+        **kwargs
+            Additional keyword arguments forwarded to
+            :func:`scipy.signal.csd`, e.g. ``nperseg``, ``window``,
+            ``noverlap``. If ``nperseg`` is not given, a MATLAB-like
+            default of ``min(256, n)`` is used.
 
         Returns
         -------
         f : np.ndarray
             Frequency array in Hz.
         Pxy : np.ndarray
-            Complex cross-spectrum ``Pxy(f)``.
+            Complex cross-spectrum :math:`P_{xy}(f)`.
+
+        Raises
+        ------
+        ValueError
+            If the channels are empty, have different lengths, or have
+            inconsistent or non-positive ``dt`` values.
         """
         if isinstance(x, Channel):
             if not any(x is s for s in self.channels):
@@ -1727,35 +2022,47 @@ class Test:
         """
         Estimate the frequency-domain transfer function between two channels.
 
-        This uses cross- and auto-spectra computed with ``scipy.signal.csd``. Two standard estimators are supported:
-        - H1: ``H1(f) = G_yx(f) / G_xx(f)``, preferred when the input is noisy.
-        - H2: ``H2(f) = G_yy(f) / G_yx(f)``, preferred when the output is noisy.
+        Cross- and auto-spectra are computed with
+        :func:`scipy.signal.csd`. Two standard estimators are supported:
 
-        Here ``G_yx`` is the cross-spectrum between output ``y`` and input ``x``, and ``G_xx``, ``G_yy`` are the auto-spectra of input and output.
+        * H1: ``H1(f) = G_yx(f) / G_xx(f)``, preferred when the input is noisy.
+        * H2: ``H2(f) = G_yy(f) / G_yx(f)``, preferred when the output is noisy.
+
+        Here, ``G_yx`` is the cross-spectrum between output ``y`` and input
+        ``x``, and ``G_xx`` / ``G_yy`` are the auto-spectra of input and
+        output.
 
         Parameters
         ----------
-        x :
-            Input (excitation) channel key (index, name or Channel instance).
-        y :
-            Output (response) channel key (index, name or Channel instance).
+        x : ChannelKey
+            Input (excitation) channel key (index, name or :class:`Channel`).
+        y : ChannelKey
+            Output (response) channel key (index, name or :class:`Channel`).
         kind : {"H1", "H2"}, optional
-            Type of transfer-function estimator (default "H1").
+            Type of transfer-function estimator (default ``"H1"``).
         processed : bool, optional
-            If True (default), use processed data from each channel.
+            If ``True`` (default), use processed data from each channel.
         use_cache : bool, optional
-            If True (default), use the Channel-level processing cache.
-        **kwargs :
-            Additional keyword arguments forwarded to ``scipy.signal.csd``,
-            e.g. ``nperseg``, ``window``, ``noverlap``.
-            If ``nperseg`` is not given, a MATLAB-like default of ``min(256, n)`` is used.
+            If ``True`` (default), use the channel-level processing cache.
+        **kwargs
+            Additional keyword arguments forwarded to
+            :func:`scipy.signal.csd`, e.g. ``nperseg``, ``window``,
+            ``noverlap``. If ``nperseg`` is not given, a MATLAB-like
+            default of ``min(256, n)`` is used.
 
         Returns
         -------
         f : np.ndarray
             Frequency array in Hz.
         H : np.ndarray
-            Complex transfer function values ``H(f)``.
+            Complex transfer function values :math:`H(f)`.
+
+        Raises
+        ------
+        ValueError
+            If the channels are empty, have different lengths, or have
+            inconsistent or non-positive ``dt`` values, or if ``kind`` is
+            not one of ``"H1"`` or ``"H2"``.
         """
         if isinstance(x, Channel):
             if not any(x is s for s in self.channels):
@@ -1822,48 +2129,53 @@ class Test:
         **plot_kwargs: Any,
     ) -> plt.Axes:
         """
-        Plot the transfer function magnitude between two channels.
+        Plot the magnitude (and optionally phase) of the transfer function.
 
         This is a convenience wrapper around :meth:`transfer_function`:
 
-        - Computes H1 or H2 transfer function between input ``x`` and output ``y``.
-        - Plots the linear magnitude ``|H(f)|`` versus frequency on a logarithmic x-axis.
-        - Optionally overlays the phase angle in degrees on a secondary y-axis.
+        * Computes H1 or H2 transfer function between input ``x`` and output
+          ``y``.
+        * Plots the linear magnitude ``|H(f)|`` versus frequency on a
+          logarithmic x-axis.
+        * Optionally overlays the phase angle in degrees on a secondary
+          y-axis.
 
         Parameters
         ----------
-        x :
-            Input (excitation) channel key (index, name or Channel instance).
-        y :
-            Output (response) channel key (index, name or Channel instance).
+        x : ChannelKey
+            Input (excitation) channel key (index, name or :class:`Channel`).
+        y : ChannelKey
+            Output (response) channel key (index, name or :class:`Channel`).
         kind : {"H1", "H2"}, optional
-            Transfer function estimator (default "H1").
+            Transfer function estimator (default ``"H1"``).
         processed : bool, optional
-            If True (default), use processed data from each channel.
+            If ``True`` (default), use processed data from each channel.
         use_cache : bool, optional
-            If True (default), use the Channel-level processing cache.
+            If ``True`` (default), use the channel-level processing cache.
         phase : bool, optional
-            If True, also plot the phase angle (in degrees) on a secondary y-axis.
+            If ``True``, also plot the phase angle (in degrees) on a
+            secondary y-axis.
         fmax : float or None, optional
-            Optional upper frequency limit in Hz for plotting.
-            If None, the full available frequency range is plotted.
+            Optional upper frequency limit in Hz for plotting. If ``None``,
+            the full available frequency range is plotted.
         ax : matplotlib.axes.Axes or None, optional
-            Axes to plot on. If None, a new figure and axes are created.
+            Axes to plot on. If ``None``, a new figure and axes are created.
         tf_kwargs : mapping or None, optional
-            Additional keyword arguments forwarded to :meth:`transfer_function`
-            and ultimately ``scipy.signal.csd``, e.g. ``nperseg``, ``window``,
-            ``noverlap``.
+            Additional keyword arguments forwarded to
+            :meth:`transfer_function` and ultimately :func:`scipy.signal.csd`,
+            e.g. ``nperseg``, ``window``, ``noverlap``.
         label : str or None, optional
-            Label for the magnitude curve (for legends). If None, a default label
-            based on the channel names is used.
-        **plot_kwargs :
-            Additional keyword arguments forwarded to ``ax.semilogx``
-            (e.g. linestyle, linewidth).
+            Label for the magnitude curve (for legends). If ``None``, a
+            default label based on the channel names is used.
+        **plot_kwargs
+            Additional keyword arguments forwarded to :meth:`Axes.semilogx`
+            (e.g. ``linestyle``, ``linewidth``).
 
         Returns
         -------
-        ax : matplotlib.axes.Axes
-            The axes with the plotted transfer function magnitude.
+        matplotlib.axes.Axes
+            Axes with the plotted transfer function magnitude (and,
+            optionally, phase).
         """
         if tf_kwargs is None:
             tf_kwargs = {}
@@ -1925,21 +2237,30 @@ class Test:
         Estimate the time delay between two channels using cross-correlation.
 
         A positive delay means that the output ``y`` lags the input ``x``,
-        based on the lag at which the cross-correlation between ``y`` and ``x`` is maximized.
+        based on the lag at which the cross-correlation between ``y`` and
+        ``x`` is maximised.
+
         Parameters
         ----------
-        x :
-            Input (excitation) channel key (index, name or Channel instance).
-        y :
-            Output (response) channel key (index, name or Channel instance).
+        x : ChannelKey
+            Input (excitation) channel key (index, name or :class:`Channel`).
+        y : ChannelKey
+            Output (response) channel key (index, name or :class:`Channel`).
         processed : bool, optional
-            If True (default), use processed data from each channel.
+            If ``True`` (default), use processed data from each channel.
         use_cache : bool, optional
-            If True (default), use the Channel-level processing cache.
+            If ``True`` (default), use the channel-level processing cache.
+
         Returns
         -------
-        tau : float
+        float
             Estimated time delay in seconds (positive if ``y`` lags ``x``).
+
+        Raises
+        ------
+        ValueError
+            If the channels are empty, have different lengths, or have
+            inconsistent or non-positive ``dt`` values.
         """
         if isinstance(x, Channel):
             if not any(x is s for s in self.channels):
@@ -1995,57 +2316,75 @@ class Test:
         **model_kwargs: Any,
     ):
         """
-        Build and return an sdypy.EMA.Model for experimental modal analysis.
+        Build and return an ``sdypy.EMA.Model`` for experimental modal analysis.
 
-        This method computes FRFs between one input channel and multiple output channels,
-        then constructs and returns an ``sdypy.EMA.Model`` instance using ``**model_kwargs``.
+        This method computes frequency-response functions (FRFs) between one
+        input channel and multiple output channels using
+        :meth:`transfer_function`, and then constructs an
+        ``sdypy.EMA.Model`` instance using ``**model_kwargs``.
 
-        The returned object provides pole estimation, stabilization charts,
+        The returned object provides pole estimation, stabilisation charts,
         modal parameter extraction and FRF reconstruction.
 
         Parameters
         ----------
-        input :
+        input : ChannelKey
             Input (excitation) channel.
-        outputs :
-            Output (response) channels.
-        kind : {"H1","H2"}, optional
-            Transfer function estimator (default "H1").
+        outputs : ChannelSelector
+            Output (response) channels (single selector or sequence).
+        kind : {"H1", "H2"}, optional
+            Transfer function estimator (default ``"H1"``).
         processed : bool, optional
-            Use processed channel data (default True).
+            Use processed channel data (default ``True``).
         use_cache : bool, optional
-            Use Channel-level cache (default True).
-        **model_kwargs :
-            All additional keyword arguments are passed directly to
+            Use channel-level cache (default ``True``).
+        **model_kwargs
+            Additional keyword arguments passed directly to
             ``sdypy.EMA.Model``. Typical options include:
-                - ``lower``: lower frequency for pole estimation
-                - ``upper``: upper frequency for pole estimation
-                - ``pol_order_high``: highest model order for LSCF
-                - ``driving_point``: index of driving FRF
-                - ``frf_type``: "accelerance", "mobility", "receptance", ...
+
+            * ``lower`` : lower frequency for pole estimation.
+            * ``upper`` : upper frequency for pole estimation.
+            * ``pol_order_high`` : highest model order for LSCF.
+            * ``driving_point`` : index of driving FRF.
+            * ``frf_type`` : ``"accelerance"``, ``"mobility"``,
+              ``"receptance"``, etc.
 
         Returns
         -------
-        model : sdypy.EMA.Model
+        sdypy.EMA.Model
+            Modal analysis model from the ``sdypy.EMA`` package.
 
-        Typical usage
-        -------------
-        After constructing the model with ``test.ema_model(...)``:
+        Raises
+        ------
+        ImportError
+            If the optional dependency ``sdypy`` is not installed.
+        ValueError
+            If no output channels are selected or if FRFs do not share
+            identical frequency grids.
 
-        1) Get poles (LSCF)::
-               model.get_poles()
-        2) Select stable poles (interactive or automatic)::
-               model.select_poles()
-              or
-               model.select_closest_poles([f1, f2, ...])
-        3) Print modal data (natural frequencies, damping and mode shapes)::
-               acc.print_modal_data()
-              or
-               print(model.nat_freq)
-               print(model.nat_xi)
-               print(model.phi)
-        4) Reconstruct FRFs and modal constants::
-               frf_rec, modal_const = model.get_constants()
+        Examples
+        --------
+        Typical usage::
+
+            model = test.ema_model(input="Shaker", outputs=[...], lower=1.0, upper=50.0)
+
+            # 1) Get poles (LSCF)
+            model.get_poles()
+
+            # 2) Select stable poles (interactive or automatic)
+            model.select_poles()
+            # or
+            model.select_closest_poles([f1, f2, ...])
+
+            # 3) Print modal data (natural frequencies, damping, mode shapes)
+            model.print_modal_data()
+            # or
+            print(model.nat_freq)
+            print(model.nat_xi)
+            print(model.phi)
+
+            # 4) Reconstruct FRFs and modal constants
+            frf_rec, modal_const = model.get_constants()
         """
         try:
             from sdypy import EMA
@@ -2093,12 +2432,30 @@ class Test:
 
     def _normalize_layout(self, layout: Any) -> list[list[Any]]:
         """
-        Normalize a layout specification into a rectangular 2D list.
+        Normalise a layout specification into a rectangular 2D list.
 
-        Each cell will be:
-        - None
-        - a single ChannelKey / Channel
-        - a sequence of ChannelKey / Channel
+        Each cell in the returned 2D list is either:
+
+        * ``None``,
+        * a single :class:`Channel` or channel key, or
+        * a sequence of :class:`Channel` or channel keys.
+
+        Parameters
+        ----------
+        layout : Any
+            Layout specification (sequence of rows or cells).
+
+        Returns
+        -------
+        list of list
+            Rectangular 2D list of layout cells.
+
+        Raises
+        ------
+        TypeError
+            If ``layout`` is not a sequence.
+        ValueError
+            If ``layout`` is empty or contains empty rows.
         """
         if not isinstance(layout, (list, tuple)):
             raise TypeError("layout must be a sequence of rows or cells.")
@@ -2130,10 +2487,25 @@ class Test:
         **kwargs: Any,
     ) -> None:
         """
-        Internal helper to route plot_type to the appropriate Channel method.
+        Internal helper to route ``plot_type`` to the appropriate channel method.
 
-        For multi-channel axes, use a generic kind label + legend.
-        For single-channel axes, use the channel's axis label.
+        For multi-channel axes, a generic quantity label is used on the
+        y-axis and individual lines are distinguished by a legend. For
+        single-channel axes, the channel's axis label is used instead.
+
+        Parameters
+        ----------
+        ch : Channel
+            Channel to plot.
+        ax : matplotlib.axes.Axes
+            Axes to plot on.
+        plot_type : str
+            Plot type specifier (time-history, Fourier, PSD, etc.).
+        multi : bool
+            If ``True``, multiple channels are plotted on the same axes.
+        **kwargs
+            Additional keyword arguments forwarded to the underlying
+            plotting method.
         """
         # Decide label behaviour
         if multi:
@@ -2209,17 +2581,48 @@ class Test:
         **kwargs: Any,
     ):
         """
-        Plot channels from this Test in a grid of subplots.
+        Plot channels from this test in a grid of subplots.
 
-        The layout argument describes how channels are arranged on the grid.
-        Each cell in layout can be:
-        - None: leave the subplot empty;
-        - a single ChannelKey / Channel: one channel on that axes;
-        - a sequence (tuple or list) of ChannelKey / Channel: multiple channels
+        The ``layout`` argument describes how channels are arranged on the
+        grid. Each cell in ``layout`` can be:
+
+        * ``None`` : leave the subplot empty.
+        * a single channel key / :class:`Channel` : one channel on that axes.
+        * a sequence of channel keys / :class:`Channel` : multiple channels
           overlaid on the same axes, with a legend.
 
-        If ``layout`` is None, a single-row layout containing all channels
-        (by index order) is used.
+        If ``layout`` is ``None``, a single-row layout containing all
+        channels (by index order) is used.
+
+        Parameters
+        ----------
+        layout : Any, optional
+            Layout specification (see above). If ``None``, all channels
+            are arranged in a single row.
+        plot_type : str, optional
+            Plot type passed to the underlying channel-plotting methods
+            (default ``"timehistory"``).
+        sharex : bool, optional
+            If ``True`` (default), share the x-axis among subplots.
+        sharey : bool, optional
+            If ``True`` (default), share the y-axis among subplots.
+        title_suffix : str or None, optional
+            Optional suffix appended to the figure title, after the test
+            name (e.g. ``"Test 04: Accelerations"``).
+        make_caption : bool, optional
+            If ``True``, also return a simple figure caption describing
+            the plotted channels.
+        **kwargs
+            Additional keyword arguments forwarded to the channel plotting
+            methods (e.g. ``color``, ``fmax=...``, etc.).
+
+        Returns
+        -------
+        fig, axes : (matplotlib.figure.Figure, np.ndarray of Axes)
+            Figure and array of axes with the plotted channels.
+        caption : str, optional
+            If ``make_caption`` is ``True``, a third return value containing
+            a simple caption string is provided.
         """
         # Default layout: single row with all channels
         if layout is None:
@@ -2299,11 +2702,46 @@ class Test:
         **kwargs: Any,
     ):
         """
-        Plot a list of channels from this Test in a grid with a fixed number of columns.
+        Plot a list of channels from this test in a grid with fixed columns.
 
-        Channels are selected via the given selector and arranged row-wise into
-        subplots with ``ncols`` columns. This is convenient for plotting many
-        similar channels (e.g. all accelerograms) at once.
+        Channels are selected via ``selector`` and arranged row-wise into
+        subplots with ``ncols`` columns. This is convenient for plotting
+        many similar channels (e.g. all accelerograms) at once.
+
+        Parameters
+        ----------
+        selector : ChannelSelector, optional
+            Channels to plot (index, name, :class:`Channel`, list, slice…).
+            If ``None`` (default), all channels are plotted.
+        ncols : int, optional
+            Number of columns in the subplot grid (default is 3).
+        plot_type : str, optional
+            Plot type passed to the underlying channel-plotting methods
+            (default ``"timehistory"``).
+        sharex : bool, optional
+            If ``True`` (default), share the x-axis among subplots.
+        sharey : bool, optional
+            If ``True`` (default), share the y-axis among subplots.
+        title_suffix : str or None, optional
+            Optional suffix appended to the figure title.
+        make_caption : bool, optional
+            If ``True``, also return a simple caption string.
+        **kwargs
+            Additional keyword arguments forwarded to the channel plotting
+            methods.
+
+        Returns
+        -------
+        fig, axes : (matplotlib.figure.Figure, np.ndarray of Axes)
+            Figure and array of axes with the plotted channels.
+        caption : str, optional
+            If ``make_caption`` is ``True``, a third return value containing
+            a simple caption string is provided.
+
+        Raises
+        ------
+        ValueError
+            If no channels are selected for plotting.
         """
         channels = list(self.iter_channels(selector))
         if not channels:
@@ -2333,30 +2771,43 @@ class Test:
         tablefmt: str = "github",
     ) -> str:
         """
-        Check basic health of selected channels using simple time-domain
-        metrics and return a tabulated string summarizing the results.
+        Check basic health of selected channels using simple time-domain metrics.
+
+        The method computes peak, RMS, crest factor, pre-event RMS and
+        a simple SNR-like ratio for each channel, and returns a tabulated
+        string summarising the results.
 
         Parameters
         ----------
-        selector :
-            Which channels to inspect. If None, all channels are checked.
-        fraction_for_event :
+        selector : ChannelSelector, optional
+            Channels to inspect. If ``None``, all channels are checked.
+        fraction_for_event : float, optional
             Fraction of the peak used to define the event window.
-        min_peak :
-            Minimum acceptable peak amplitude. If None, not applied.
-        min_snr :
+        min_peak : float or None, optional
+            Minimum acceptable peak amplitude. If ``None``, this criterion
+            is not applied.
+        min_snr : float, optional
             Minimum RMS(event)/RMS(pre-event) ratio for a healthy response.
-        min_crest :
+        min_crest : float, optional
             Minimum crest factor (peak/RMS) for a healthy response.
-        processed, use_cache :
-            Passed to ``Channel.xy``.
-        tablefmt :
-            Tabulate format for the returned table.
+        processed : bool, optional
+            Passed to :meth:`Channel.xy` (default ``True``).
+        use_cache : bool, optional
+            Passed to :meth:`Channel.xy` (default ``True``).
+        tablefmt : str, optional
+            Table format passed to :func:`tabulate` (default ``"github"``).
 
         Returns
         -------
         str
-            The health check table as a formatted string.
+            Health check table as a formatted string. If no channels are
+            selected, a short message is returned instead.
+
+        Notes
+        -----
+        The ``status`` column is a simple qualitative label based on the
+        peak amplitude, crest factor and SNR thresholds and should be
+        interpreted as a quick screening rather than a rigorous test.
         """
         headers = [
             "idx",

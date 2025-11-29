@@ -8,26 +8,31 @@ import matplotlib.pyplot as plt
 
 @dataclass
 class FourierSpectrum:
-    """Single-sided Fourier amplitude spectrum.
+    """
+    Single-sided Fourier amplitude spectrum.
+
+    This dataclass stores the frequency axis and corresponding single-sided
+    amplitude spectrum (magnitude of the FFT) for a real-valued time series.
 
     Parameters
     ----------
     f : np.ndarray
-        Frequency array in Hz.
+        One-dimensional array of frequencies in Hz.
     s : np.ndarray
-        Amplitude spectrum (absolute FFT values) corresponding to ``f``.
+        One-dimensional array of amplitude values corresponding to ``f``.
     """
 
     f: np.ndarray
     s: np.ndarray
 
     def peak(self) -> tuple[float, float]:
-        """Return the frequency and amplitude at the maximum spectral peak.
+        """
+        Return the frequency and amplitude at the maximum spectral peak.
 
         Returns
         -------
         f_peak : float
-            Frequency at which the spectrum is maximum.
+            Frequency at which the amplitude spectrum is maximum.
         s_peak : float
             Maximum amplitude value.
 
@@ -49,22 +54,25 @@ class FourierSpectrum:
         fmax: Optional[float] = 50.0,
         **plot_kwargs: Any,
     ) -> plt.Axes:
-        """Plot the Fourier amplitude spectrum.
+        """
+        Plot the Fourier amplitude spectrum.
 
         Parameters
         ----------
         ax : matplotlib.axes.Axes, optional
             Axes to plot on. If ``None``, a new figure and axes are created.
-        fmax : float, optional
-            Upper x-limit for the frequency axis. If ``None``, the full
-            frequency range is shown. Default is 50.0 Hz.
+        fmax : float or None, optional
+            Upper x-limit for the frequency axis in Hz. If ``None``, the full
+            frequency range is shown. Default is ``50.0``.
         **plot_kwargs
-            Extra keyword arguments forwarded to ``ax.plot``.
+            Additional keyword arguments forwarded to
+            :meth:`matplotlib.axes.Axes.plot` (for example ``color``,
+            ``linewidth``).
 
         Returns
         -------
         matplotlib.axes.Axes
-            The axes with the plotted spectrum.
+            Axes instance with the plotted spectrum.
         """
         if ax is None:
             _, ax = plt.subplots()
@@ -79,21 +87,26 @@ class FourierSpectrum:
 
 @dataclass
 class WelchSpectrum:
-    """Power spectral density (PSD) result from Welch's method.
+    """
+    Power spectral density (PSD) result from Welch's method.
+
+    This dataclass stores the frequency axis and corresponding power
+    spectral density values obtained using Welch's method.
 
     Parameters
     ----------
     f : np.ndarray
-        Frequency array in Hz.
+        One-dimensional array of frequencies in Hz.
     p : np.ndarray
-        PSD values corresponding to ``f``.
+        One-dimensional array of PSD values corresponding to ``f``.
     """
 
     f: np.ndarray
     p: np.ndarray
 
     def peak(self) -> tuple[float, float]:
-        """Return the frequency and PSD value at the maximum spectral peak.
+        """
+        Return the frequency and PSD value at the maximum spectral peak.
 
         Returns
         -------
@@ -118,22 +131,24 @@ class WelchSpectrum:
         fmax: Optional[float] = 50.0,
         **plot_kwargs: Any,
     ) -> plt.Axes:
-        """Plot the Welch power spectral density.
+        """
+        Plot the Welch power spectral density.
 
         Parameters
         ----------
         ax : matplotlib.axes.Axes, optional
             Axes to plot on. If ``None``, a new figure and axes are created.
-        fmax : float, optional
-            Upper x-limit for the frequency axis. If ``None``, the full
-            frequency range is shown. Default is 50.0 Hz.
+        fmax : float or None, optional
+            Upper x-limit for the frequency axis in Hz. If ``None``, the full
+            frequency range is shown. Default is ``50.0``.
         **plot_kwargs
-            Extra keyword arguments forwarded to ``ax.plot``.
+            Additional keyword arguments forwarded to
+            :meth:`matplotlib.axes.Axes.plot`.
 
         Returns
         -------
         matplotlib.axes.Axes
-            The axes with the plotted PSD.
+            Axes instance with the plotted PSD.
         """
         if ax is None:
             _, ax = plt.subplots()

@@ -14,26 +14,73 @@ from .response import ResponseSpectrum, sdof_newmark_response
 
 @dataclass(eq=False)
 class Channel:
-    """Single time-history channel with metadata and processing parameters.
+    """
+    Single time-history channel with metadata and processing parameters.
+
+    This class represents a single 1D time-history signal together with
+    timing information, physical metadata (quantity, units), and a set of
+    processing parameters (drift, filter, baseline, trim). Processing is
+    non-destructive: methods update parameters and return new ``Channel``
+    instances, while the raw data remain unchanged.
 
     Parameters
     ----------
     data : np.ndarray
-        1-D array of raw signal values.
+        One-dimensional array of raw signal values.
     dt : float, optional
-        Sampling interval in seconds. If not provided, a ``time`` array
-        must be supplied.
+        Sampling interval in seconds. If not provided, an explicit ``time``
+        array must be supplied.
     t0 : float, optional
-        Start time in seconds (used when constructing ``time`` from ``dt``).
+        Start time in seconds. Used to build the time vector when ``dt`` is
+        provided but ``time`` is not. Default is ``0.0``.
     time : np.ndarray, optional
-        Explicit time array matching ``data`` in shape.
+        Explicit time array matching ``data`` in shape. If provided, it is
+        used to infer ``dt`` and ``t0`` if they are not set.
+    name_input : str, optional
+        Original name as found in the input file or data source.
+    name_user : str, optional
+        User-defined short name (for example ``"Acc1"``).
+    label_axis : str, optional
+        Axis label for plotting, typically including units (for example
+        ``"Acc1 [g]"``).
+    label_legend : str, optional
+        Legend label for plotting (for example ``"Acc1: Footing"``).
+    description_long : str, optional
+        Long human-readable description of the channel.
+    quantity : str, optional
+        Physical quantity type (for example ``"displacement"``, ``"force"``,
+        ``"acceleration"``).
+    units : str, optional
+        Engineering units for the physical quantity (for example ``"m"``,
+        ``"kN"``, ``"g"``).
+    raw_units : str, optional
+        Raw data acquisition units (for example ``"V"``).
+    calibration_factor : float, optional
+        Multiplicative factor used to convert raw data to physical units.
+        Default is ``1.0`` (no scaling).
+    drift_params : dict, optional
+        Parameters controlling drift correction. By default an empty dict;
+        when set, merged with ``DRIFT_DEFAULTS``.
+    filter_params : dict, optional
+        Parameters controlling Butterworth filtering. By default an empty
+        dict; when set, merged with ``FILTER_DEFAULTS``.
+    baseline_params : dict, optional
+        Parameters controlling baseline correction via ``scipy.signal.detrend``.
+    trim_params : dict, optional
+        Parameters defining a time window for trimming (typically containing
+        ``"t_start"`` and ``"t_end"`` in seconds).
+    processing_notes : list of str, optional
+        Free-form notes describing processing steps applied to the channel.
+    tags : set of str, optional
+        Tags used for grouping, such as ``{"q:acceleration"}``.
+    meta : dict, optional
+        Free-form metadata dictionary (for example sensor type, location).
 
     Notes
     -----
-    The class stores processing parameters (drift, filter, baseline, trim)
-    and supports non-destructive processing: methods that change processing
-    parameters return new ``Channel`` instances. Use ``processed()`` to
-    obtain the time and data arrays with all current processing applied.
+    Processed data are obtained through :meth:`processed` or :meth:`xy`,
+    which apply drift correction, filtering, baseline correction, trimming,
+    and calibration in a fixed order. Results can be cached for efficiency.
     """
 
     # Default processing parameters
@@ -102,8 +149,21 @@ class Channel:
 
     def __post_init__(self) -> None:
         """
-        Normalise arrays, infer missing timing info, and set sensible defaults
-        for names / labels / tags after dataclass initialisation.
+        Finalise initialisation after dataclass construction.
+
+        This method normalises arrays, infers missing timing information, and
+        sets sensible defaults for names, labels and tags. It is executed
+        automatically by the dataclass after ``__init__``.
+
+        Notes
+        -----
+        * ``data`` is converted to a 1D NumPy array and validated.
+        * If ``time`` is provided, it is checked against ``data`` and used to
+          infer ``dt`` and ``t0`` when missing.
+        * If only ``dt`` is provided, an equally-spaced time vector is
+          constructed starting at ``t0``.
+        * Tags and labels are updated based on ``quantity``, ``units`` and
+          names when available.
         """
         # Ensure data is a 1D NumPy array
         self.data = np.asarray(self.data)
@@ -153,7 +213,13 @@ class Channel:
     @property
     def duration(self) -> float:
         """
-        Total duration of the channel in seconds, based on the time vector.
+        Total duration of the channel in seconds.
+
+        Returns
+        -------
+        float
+            Duration computed from the first and last entries of the time
+            vector. Returns ``0.0`` for an empty channel.
         """
         if self.data.size == 0:
             return 0.0
@@ -166,7 +232,11 @@ class Channel:
 
     def _clear_cache(self) -> None:
         """
-        Clear cached processed data (called when processing parameters change).
+        Clear cached processed data.
+
+        This method invalidates any cached processed time and data as well
+        as the stored processing signature. It is called whenever processing
+        parameters are updated on a new ``Channel`` instance.
         """
         self._cache_processed_time = None
         self._cache_processed_data = None
@@ -177,12 +247,17 @@ class Channel:
     # ------------------------------------------------------------------ #
 
     def info(self) -> str:
-        """Return a clean, human-readable summary of channel metadata.
+        """
+        Return a human-readable summary of channel metadata and processing.
+
+        The summary includes basic signal characteristics, timing,
+        physical meaning and calibration, naming and labels, tags,
+        processing parameters and notes, and any additional metadata.
 
         Returns
         -------
         str
-            Multi-line human-readable summary suitable for printing.
+            Multi-line summary string suitable for printing.
         """
         lines = []
         # Header
@@ -273,17 +348,23 @@ class Channel:
     # ------------------------------------------------------------------ #
 
     def drift_corrected(self, **override: Any) -> "Channel":
-        """Return a new Channel with updated drift correction parameters.
+        """
+        Return a new channel with updated drift correction parameters.
+
+        Drift correction is applied lazily in :meth:`processed`. This method
+        only updates the stored parameters, clears the processing cache and
+        appends a processing note.
 
         Parameters
         ----------
-        **override :
-            Keyword arguments forwarded to the stored drift parameters.
+        **override
+            Keyword arguments that override or extend the current drift
+            parameters. Merged with ``DRIFT_DEFAULTS`` and ``drift_params``.
 
-        Notes
-        -----
-        The actual correction is applied lazily in ``processed()``; this
-        method only updates the parameters and returns a new ``Channel``.
+        Returns
+        -------
+        Channel
+            New channel instance with updated drift parameters and tags.
         """
         params = {**self.DRIFT_DEFAULTS, **self.drift_params, **override}
         new = replace(self, drift_params=params)
@@ -296,17 +377,23 @@ class Channel:
         return new
 
     def filtered(self, **override: Any) -> "Channel":
-        """Return a new Channel with updated Butterworth filter parameters.
+        """
+        Return a new channel with updated Butterworth filter parameters.
+
+        Filtering is applied lazily in :meth:`processed`. This method records
+        the requested filter specification, clears the processing cache and
+        appends a processing note.
 
         Parameters
         ----------
-        **override :
-            Keyword arguments forwarded to the stored filter parameters.
+        **override
+            Keyword arguments that override or extend the current filter
+            parameters. Merged with ``FILTER_DEFAULTS`` and ``filter_params``.
 
-        Notes
-        -----
-        Actual filtering is applied in ``processed()``; this method only
-        records the requested filter specification.
+        Returns
+        -------
+        Channel
+            New channel instance with updated filter parameters and tags.
         """
         params = {**self.FILTER_DEFAULTS, **self.filter_params, **override}
         new = replace(self, filter_params=params)
@@ -319,13 +406,23 @@ class Channel:
         return new
 
     def baseline_corrected(self, **override: Any) -> "Channel":
-        """Return a new Channel with updated baseline correction parameters.
+        """
+        Return a new channel with updated baseline correction parameters.
+
+        Baseline correction is applied lazily in :meth:`processed` using
+        :func:`scipy.signal.detrend`. This method records the detrend
+        parameters, clears the processing cache and appends a processing note.
 
         Parameters
         ----------
-        **override :
-            Keyword arguments forwarded to the baseline correction method
-            (passed to ``scipy.signal.detrend`` when applied).
+        **override
+            Keyword arguments forwarded to :func:`scipy.signal.detrend`
+            when baseline correction is applied.
+
+        Returns
+        -------
+        Channel
+            New channel instance with updated baseline parameters and tags.
         """
         params = {**self.BASELINE_DEFAULTS, **self.baseline_params, **override}
         new = replace(self, baseline_params=params)
@@ -339,13 +436,23 @@ class Channel:
         return new
 
     def trimmed(self, **override: Any) -> "Channel":
-        """Return a new Channel with updated trim window parameters.
+        """
+        Return a new channel with updated trimming window parameters.
+
+        Trimming is applied in :meth:`processed` by restricting the time and
+        data arrays to a specified interval.
 
         Parameters
         ----------
-        **override :
-            Keyword arguments typically including ``t_start`` and ``t_end``
-            (in seconds) that define the trimming window.
+        **override
+            Keyword arguments that override or extend the current trimming
+            parameters. Typical keys are ``"t_start"`` and ``"t_end"`` in
+            seconds.
+
+        Returns
+        -------
+        Channel
+            New channel instance with updated trimming parameters and tags.
         """
         defaults = {
             "t_start": float(self.time[0]),
@@ -377,11 +484,44 @@ class Channel:
         use_cache: bool = True,
     ) -> "Channel":
         """
-        Return a new Channel trimmed to where the signal exceeds a threshold.
+        Trim the channel to where the signal exceeds a given threshold.
 
-        This is the classic 'bracketed duration' style trimming. The window is
-        defined from the first to the last sample where the signal exceeds the
-        threshold, optionally in absolute value, with optional time buffers.
+        The trimming window is defined from the first to the last sample where
+        the signal magnitude exceeds ``threshold``, optionally in absolute
+        value, with configurable buffers before and after this window.
+
+        Parameters
+        ----------
+        threshold : float, optional
+            Amplitude threshold used to detect the start and end of the
+            significant portion of the record. Default is ``0.01``.
+        use_abs : bool, optional
+            If ``True`` (default), the threshold is applied to the absolute
+            value of the signal. If ``False``, it is applied to the raw
+            signal.
+        buffer_before : float, optional
+            Time (seconds) to extend the trimming window before the first
+            threshold-crossing sample. Default is ``0.0``.
+        buffer_after : float, optional
+            Time (seconds) to extend the trimming window after the last
+            threshold-crossing sample. Default is ``0.0``.
+        processed : bool, optional
+            If ``True`` (default), trimming is based on the processed signal
+            returned by :meth:`xy`. If ``False``, the raw data are used.
+        use_cache : bool, optional
+            If ``True`` (default), use the processing cache when obtaining
+            the signal.
+
+        Returns
+        -------
+        Channel
+            New channel instance with updated trimming parameters.
+
+        Raises
+        ------
+        ValueError
+            If the channel is empty, no samples exceed the threshold, or
+            the resulting window is empty after buffering.
         """
         t, y = self.xy(processed=processed, use_cache=use_cache)
         if y.size == 0:
@@ -416,8 +556,44 @@ class Channel:
         use_cache: bool = True,
     ) -> "Channel":
         """
-        Return a new Channel trimmed to where the signal is above a fraction
-        of its peak amplitude.
+        Trim the channel to where the signal exceeds a fraction of its peak.
+
+        The trimming window is defined using a threshold equal to
+        ``fraction`` times the signal peak amplitude, optionally in absolute
+        value, with configurable buffers before and after.
+
+        Parameters
+        ----------
+        fraction : float, optional
+            Fraction of the peak amplitude used to define the threshold.
+            Must be in the range ``(0, 1]``. Default is ``0.05`` (5% of peak).
+        use_abs : bool, optional
+            If ``True`` (default), the peak and threshold are computed using
+            the absolute value of the signal. If ``False``, they are computed
+            from the raw signal.
+        buffer_before : float, optional
+            Time (seconds) to extend the trimming window before the first
+            threshold-crossing sample. Default is ``0.0``.
+        buffer_after : float, optional
+            Time (seconds) to extend the trimming window after the last
+            threshold-crossing sample. Default is ``0.0``.
+        processed : bool, optional
+            If ``True`` (default), use the processed signal; otherwise use
+            the raw data.
+        use_cache : bool, optional
+            If ``True`` (default), use the processing cache when obtaining
+            the signal.
+
+        Returns
+        -------
+        Channel
+            New channel instance with updated trimming parameters.
+
+        Raises
+        ------
+        ValueError
+            If ``fraction`` is out of range, the channel is empty, the peak
+            amplitude is non-positive, or the resulting window is empty.
         """
         if not (0.0 < fraction <= 1.0):
             raise ValueError(f"fraction must be in (0, 1], got {fraction!r}")
@@ -453,10 +629,52 @@ class Channel:
         use_cache: bool = True,
     ) -> "Channel":
         """
-        Return a new Channel trimmed to the Arias-intensity-based significant
-        duration window.
+        Trim the channel using an Arias-intensity-based significant duration.
 
-        Data is assumed to be acceleration in g.
+        The trimming window is defined between the times when the cumulative
+        Arias intensity reaches fractions ``lower`` and ``upper`` of its final
+        value, optionally extended with time buffers.
+
+        Parameters
+        ----------
+        lower : float, optional
+            Lower fraction of final Arias intensity (for example ``0.05``
+            for 5%). Must satisfy ``0 <= lower < upper <= 1``. Default is
+            ``0.05``.
+        upper : float, optional
+            Upper fraction of final Arias intensity (for example ``0.95``
+            for 95%). Default is ``0.95``.
+        g : float, optional
+            Gravity acceleration used to convert acceleration in g to m/s².
+            Default is ``9.81``.
+        buffer_before : float, optional
+            Time (seconds) to extend the trimming window before the lower
+            Arias intensity crossing. Default is ``0.0``.
+        buffer_after : float, optional
+            Time (seconds) to extend the trimming window after the upper
+            Arias intensity crossing. Default is ``0.0``.
+        processed : bool, optional
+            If ``True`` (default), use the processed acceleration signal
+            when computing Arias intensity.
+        use_cache : bool, optional
+            If ``True`` (default), use the processing cache when obtaining
+            the signal.
+
+        Returns
+        -------
+        Channel
+            New channel instance with updated trimming parameters.
+
+        Raises
+        ------
+        ValueError
+            If the channel is empty, the final Arias intensity is non-positive,
+            the ``lower``/``upper`` values are invalid, or the resulting
+            window is empty after buffering.
+
+        Notes
+        -----
+        The channel data are assumed to represent acceleration in units of g.
         """
         if not (0.0 <= lower < upper <= 1.0):
             raise ValueError(
@@ -489,26 +707,36 @@ class Channel:
     # ------------------------------------------------------------------ #
 
     def processed(self, use_cache: bool = True) -> tuple[np.ndarray, np.ndarray]:
-        """Return ``(time, data)`` after applying current processing steps.
+        """
+        Return time and data after applying all processing steps.
 
-        Processing order
-        ----------------
-        1. Drift correction
-        2. Butterworth filter
-        3. Baseline detrend
-        4. Trimming (``t_start``, ``t_end``)
-        5. Calibration-factor scaling
+        The following operations are applied in a fixed order:
+
+        1. Drift correction (if ``drift_params`` are set).
+        2. Butterworth filtering (if ``filter_params`` are set).
+        3. Baseline detrend (if ``baseline_params`` are set).
+        4. Trimming by time window (if ``trim_params`` are set).
+        5. Calibration-factor scaling.
 
         Parameters
         ----------
         use_cache : bool, optional
-            If True (default), cached processed results are returned when
-            available and the processing signature matches.
+            If ``True`` (default), cached processed results are returned
+            when available and the processing signature has not changed.
 
         Returns
         -------
-        t, y : tuple
-            Time and data arrays after processing.
+        t : np.ndarray
+            Time array after trimming (if applied).
+        y : np.ndarray
+            Processed data array after all enabled steps.
+
+        Raises
+        ------
+        ValueError
+            If processing parameters are inconsistent (for example invalid
+            filter cutoff, trimming window outside the time range, or missing
+            ``dt`` for filtering or response-related calculations).
         """
         signature = (
             tuple(sorted(self.drift_params.items())),
@@ -607,7 +835,24 @@ class Channel:
         self, processed: bool = True, use_cache: bool = True
     ) -> tuple[np.ndarray, np.ndarray]:
         """
-        Convenience method to get (x, y) for plotting.
+        Return coordinate arrays for plotting.
+
+        Parameters
+        ----------
+        processed : bool, optional
+            If ``True`` (default), return the processed time and data arrays
+            from :meth:`processed`. If ``False``, return the raw ``time`` and
+            ``data`` attributes.
+        use_cache : bool, optional
+            If ``True`` (default) and ``processed`` is ``True``, use the
+            processing cache when computing processed data.
+
+        Returns
+        -------
+        x : np.ndarray
+            Time array.
+        y : np.ndarray
+            Data array (raw or processed depending on ``processed``).
         """
         if processed:
             return self.processed(use_cache=use_cache)
@@ -624,7 +869,28 @@ class Channel:
         use_cache: bool = True,
     ) -> tuple[float, float]:
         """
-        Return the time and value where the data reaches its maximum absolute amplitude.
+        Return the time and value of the maximum absolute amplitude.
+
+        Parameters
+        ----------
+        processed : bool, optional
+            If ``True`` (default), use the processed data; otherwise use
+            the raw data.
+        use_cache : bool, optional
+            If ``True`` (default) and ``processed`` is ``True``, use the
+            processing cache.
+
+        Returns
+        -------
+        t_peak : float
+            Time at which the maximum absolute amplitude occurs.
+        y_peak : float
+            Data value at the maximum absolute amplitude.
+
+        Raises
+        ------
+        ValueError
+            If the channel is empty.
         """
         t, y = self.xy(processed=processed, use_cache=use_cache)
         if y.size == 0:
@@ -638,7 +904,28 @@ class Channel:
         use_cache: bool = True,
     ) -> tuple[float, float]:
         """
-        Return the time and value of the maximum data value (positive peak).
+        Return the time and value of the maximum (positive) data value.
+
+        Parameters
+        ----------
+        processed : bool, optional
+            If ``True`` (default), use the processed data; otherwise use
+            the raw data.
+        use_cache : bool, optional
+            If ``True`` (default) and ``processed`` is ``True``, use the
+            processing cache.
+
+        Returns
+        -------
+        t_peak : float
+            Time at which the maximum value occurs.
+        y_peak : float
+            Maximum data value.
+
+        Raises
+        ------
+        ValueError
+            If the channel is empty.
         """
         t, y = self.xy(processed=processed, use_cache=use_cache)
         if y.size == 0:
@@ -652,7 +939,28 @@ class Channel:
         use_cache: bool = True,
     ) -> tuple[float, float]:
         """
-        Return the time and value of the minimum data value (negative peak).
+        Return the time and value of the minimum (negative) data value.
+
+        Parameters
+        ----------
+        processed : bool, optional
+            If ``True`` (default), use the processed data; otherwise use
+            the raw data.
+        use_cache : bool, optional
+            If ``True`` (default) and ``processed`` is ``True``, use the
+            processing cache.
+
+        Returns
+        -------
+        t_peak : float
+            Time at which the minimum value occurs.
+        y_peak : float
+            Minimum data value.
+
+        Raises
+        ------
+        ValueError
+            If the channel is empty.
         """
         t, y = self.xy(processed=processed, use_cache=use_cache)
         if y.size == 0:
@@ -666,7 +974,26 @@ class Channel:
         use_cache: bool = True,
     ) -> float:
         """
-        Compute the Root Mean Square (RMS) value of the channel.
+        Compute the root-mean-square (RMS) value of the channel.
+
+        Parameters
+        ----------
+        processed : bool, optional
+            If ``True`` (default), compute RMS of the processed data;
+            otherwise use the raw data.
+        use_cache : bool, optional
+            If ``True`` (default) and ``processed`` is ``True``, use the
+            processing cache.
+
+        Returns
+        -------
+        float
+            RMS value of the signal.
+
+        Raises
+        ------
+        ValueError
+            If the channel is empty.
         """
         _, y = self.xy(processed=processed, use_cache=use_cache)
         if y.size == 0:
@@ -684,6 +1011,28 @@ class Channel:
     ) -> FourierSpectrum:
         """
         Compute the (single-sided) Fourier amplitude spectrum of the channel.
+
+        The spectrum is computed via zero-padded FFT to the next power-of-two
+        length, and the single-sided amplitude spectrum is returned.
+
+        Parameters
+        ----------
+        processed : bool, optional
+            If ``True`` (default), use the processed data; otherwise use
+            the raw data.
+        use_cache : bool, optional
+            If ``True`` (default) and ``processed`` is ``True``, use the
+            processing cache.
+
+        Returns
+        -------
+        FourierSpectrum
+            Object containing frequency array and amplitude spectrum.
+
+        Raises
+        ------
+        ValueError
+            If the channel is empty or ``dt`` is missing/invalid.
         """
         _, y = self.xy(processed=processed, use_cache=use_cache)
         n = len(y)
@@ -702,8 +1051,23 @@ class Channel:
         use_cache: bool = True,
     ) -> tuple[float, float]:
         """
-        Convenience wrapper returning the dominant frequency and its amplitude
-        from the Fourier spectrum.
+        Return the dominant frequency and amplitude from the Fourier spectrum.
+
+        Parameters
+        ----------
+        processed : bool, optional
+            If ``True`` (default), use the processed data; otherwise use
+            the raw data.
+        use_cache : bool, optional
+            If ``True`` (default) and ``processed`` is ``True``, use the
+            processing cache.
+
+        Returns
+        -------
+        f_peak : float
+            Frequency at which the spectrum amplitude is maximum.
+        s_peak : float
+            Maximum amplitude of the Fourier spectrum.
         """
         spec = self.fourier(processed=processed, use_cache=use_cache)
         return spec.peak()
@@ -719,7 +1083,30 @@ class Channel:
         **kwargs: Any,
     ) -> WelchSpectrum:
         """
-        Compute the Power Spectral Density (PSD) using Welch's method.
+        Compute the power spectral density (PSD) using Welch's method.
+
+        Parameters
+        ----------
+        processed : bool, optional
+            If ``True`` (default), use the processed data; otherwise use
+            the raw data.
+        use_cache : bool, optional
+            If ``True`` (default) and ``processed`` is ``True``, use the
+            processing cache.
+        **kwargs
+            Additional keyword arguments forwarded to
+            :func:`scipy.signal.welch`. If ``nperseg`` is not provided, a
+            default of ``min(256, n)`` is used.
+
+        Returns
+        -------
+        WelchSpectrum
+            Object containing frequency array and PSD values.
+
+        Raises
+        ------
+        ValueError
+            If the channel is empty or ``dt`` is missing/invalid.
         """
         _, y = self.xy(processed=processed, use_cache=use_cache)
         n = len(y)
@@ -740,8 +1127,26 @@ class Channel:
         **kwargs: Any,
     ) -> tuple[float, float]:
         """
-        Convenience wrapper returning the dominant frequency and PSD amplitude
-        from the Welch spectrum.
+        Return the dominant frequency and PSD amplitude from the Welch spectrum.
+
+        Parameters
+        ----------
+        processed : bool, optional
+            If ``True`` (default), use the processed data; otherwise use
+            the raw data.
+        use_cache : bool, optional
+            If ``True`` (default) and ``processed`` is ``True``, use the
+            processing cache.
+        **kwargs
+            Additional keyword arguments forwarded to
+            :meth:`welch_psd` and then to :func:`scipy.signal.welch`.
+
+        Returns
+        -------
+        f_peak : float
+            Frequency at which the PSD is maximum.
+        p_peak : float
+            Maximum PSD value.
         """
         psd = self.welch_psd(processed=processed, use_cache=use_cache, **kwargs)
         return psd.peak()
@@ -759,8 +1164,34 @@ class Channel:
         """
         Compute cumulative Arias intensity and significant-duration window.
 
-        Assumes channel contains acceleration in g. Returns AriasResult with
-        Ia(t) and t_start/t_end for the 5%/95% points by default.
+        The channel is assumed to contain acceleration in units of g. The
+        resulting Arias intensity is computed via numerical integration of
+        squared acceleration, and the 5–95% significant-duration window is
+        identified.
+
+        Parameters
+        ----------
+        g : float, optional
+            Gravity acceleration used to convert from g to m/s². Default is
+            ``9.81``.
+        processed : bool, optional
+            If ``True`` (default), use the processed acceleration signal;
+            otherwise use the raw data.
+        use_cache : bool, optional
+            If ``True`` (default) and ``processed`` is ``True``, use the
+            processing cache.
+
+        Returns
+        -------
+        AriasResult
+            Object containing time array, cumulative Arias intensity, and
+            start/end times of the 5–95% significant-duration window.
+
+        Raises
+        ------
+        ValueError
+            If the channel is empty or the final Arias intensity is
+            non-positive.
         """
         t, y = self.xy(processed=processed, use_cache=use_cache)
         if y.size == 0:
@@ -795,14 +1226,43 @@ class Channel:
         use_cache: bool = True,
     ) -> ResponseSpectrum:
         """
-        Compute elastic response spectrum for a grid of periods.
+        Compute an elastic response spectrum for a grid of periods.
 
-        Inputs:
-        - periods: 1D array of natural periods [s]
-        - g: gravity to convert from g -> m/s^2
-        - ksi: damping ratio
+        The response spectrum is computed by subjecting a set of linear
+        single-degree-of-freedom (SDOF) oscillators, with specified damping
+        ratio, to the acceleration record using the Newmark-beta average
+        acceleration method.
 
-        Returns a ResponseSpectrum (Sa returned in g).
+        Parameters
+        ----------
+        periods : np.ndarray, optional
+            One-dimensional array of natural periods (in seconds) at which
+            the spectrum is evaluated. Default is ``np.linspace(0.05, 5.0, 100)``.
+        g : float, optional
+            Gravity acceleration used to convert from g to m/s². Default is
+            ``9.81``.
+        ksi : float, optional
+            Damping ratio of the SDOF systems (for example ``0.05`` for 5%
+            damping). Default is ``0.05``.
+        processed : bool, optional
+            If ``True`` (default), use the processed acceleration signal;
+            otherwise use the raw data.
+        use_cache : bool, optional
+            If ``True`` (default) and ``processed`` is ``True``, use the
+            processing cache.
+
+        Returns
+        -------
+        ResponseSpectrum
+            Object containing periods, spectral displacement (``Sd``),
+            velocity (``Sv``) and acceleration (``Sa`` in units of g), and
+            the damping ratio.
+
+        Raises
+        ------
+        ValueError
+            If the channel is empty, ``dt`` is missing/invalid, ``periods``
+            is not 1D, or contains non-positive values.
         """
         _, a = self.xy(processed=processed, use_cache=use_cache)
         if a.size == 0:
@@ -828,10 +1288,6 @@ class Channel:
     # Plotting
     # ------------------------------------------------------------------ #
 
-    # ------------------------------------------------------------------ #
-    # Plotting
-    # ------------------------------------------------------------------ #
-
     def plot(
         self,
         ax: Optional[plt.Axes] = None,
@@ -844,49 +1300,53 @@ class Channel:
         **plot_kwargs: Any,
     ) -> plt.Axes:
         """
-        Plot this channel in various representations.
+        Plot the channel in one of several supported representations.
 
         The default behaviour (``plot_type='timehistory'``) is to plot the
-        time history. Other plot types delegate to the corresponding helper
-        methods (Fourier spectrum, PSD, Arias intensity, response spectrum).
+        time history. Other values of ``plot_type`` delegate to helper
+        methods to plot Fourier spectrum, power spectral density, Arias
+        intensity or response spectrum.
 
-        Supported plot_type values
-        --------------------------
-        - "timehistory", "time", "time_history"
-        - "fourier", "fft"
-        - "psd", "welch", "power"
-        - "arias", "husid"
-        - "response", "response_spectrum", "rs"
+        Supported ``plot_type`` values
+        -------------------------------
+        * ``"timehistory"``, ``"time"``, ``"time_history"``
+        * ``"fourier"``, ``"fft"``
+        * ``"psd"``, ``"welch"``, ``"power"``
+        * ``"arias"``, ``"husid"``
+        * ``"response"``, ``"response_spectrum"``, ``"rs"``
 
         Parameters
         ----------
         ax : matplotlib.axes.Axes, optional
-            Axes to plot on. If ``None``, a new figure and axes are created.
+            Axes to plot on. If ``None``, a new figure and axes are created
+            with :func:`matplotlib.pyplot.subplots`.
         processed : bool, optional
-            If True (default), use processed data for time-domain plotting and
-            for any spectral quantities that depend on the signal.
+            If ``True`` (default), use processed data for time-domain
+            plotting and for spectral quantities. If ``False``, use raw data.
         use_cache : bool, optional
-            If True (default), use the Channel-level processing cache.
+            If ``True`` (default) and ``processed`` is ``True``, use the
+            processing cache.
         include_label : bool, optional
-            For time-history plots, if True (default) use ``label_axis`` as
-            the y-axis label when available.
+            For time-history plots, if ``True`` (default) use ``label_axis``
+            as the y-axis label when available.
         include_kind : bool, optional
-            For time-history plots, if True, build a generic y-label from
-            ``quantity`` and ``units`` (e.g. "Acceleration [g]").
+            For time-history plots, if ``True``, build a generic y-label from
+            ``quantity`` and ``units`` (e.g. ``"Acceleration [g]"``). This
+            overrides any existing y-label if set.
         include_legend : bool, optional
-            For time-history plots, if True, add a legend using
-            ``label_legend`` / ``name_user``.
+            For time-history plots, if ``True``, add a legend using
+            ``label_legend`` or ``name_user``.
         plot_type : str, optional
-            Which representation to plot. See the list above. Defaults to
-            "timehistory".
+            Representation to plot. See list above. Default is
+            ``"timehistory"``.
         **plot_kwargs
             Additional keyword arguments forwarded to the underlying plotting
-            method (e.g. ``color``, ``fmax=...``, ``periods=...``, etc.).
+            method (for example line style, color, ``fmax``, ``periods``).
 
         Returns
         -------
         matplotlib.axes.Axes
-            The axes with the plotted data.
+            Axes instance containing the requested plot.
 
         Raises
         ------
@@ -964,7 +1424,29 @@ class Channel:
         **plot_kwargs: Any,
     ) -> plt.Axes:
         """
-        Plot the Fourier amplitude spectrum of this channel.
+        Plot the Fourier amplitude spectrum of the channel.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on. If ``None``, a new figure and axes are created.
+        processed : bool, optional
+            If ``True`` (default), compute the spectrum from processed data;
+            otherwise use raw data.
+        use_cache : bool, optional
+            If ``True`` (default) and ``processed`` is ``True``, use the
+            processing cache.
+        fmax : float or None, optional
+            Maximum frequency shown on the plot (in Hz). If ``None``, the
+            full frequency range is used. Default is ``50.0``.
+        **plot_kwargs
+            Additional keyword arguments forwarded to
+            :meth:`FourierSpectrum.plot`.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            Axes instance containing the Fourier spectrum plot.
         """
         spec = self.fourier(processed=processed, use_cache=use_cache)
         return spec.plot(ax=ax, fmax=fmax, **plot_kwargs)
@@ -978,7 +1460,29 @@ class Channel:
         **welch_kwargs: Any,
     ) -> plt.Axes:
         """
-        Plot the Welch power spectral density of this channel.
+        Plot the power spectral density (PSD) using Welch's method.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on. If ``None``, a new figure and axes are created.
+        processed : bool, optional
+            If ``True`` (default), compute the PSD from processed data;
+            otherwise use raw data.
+        use_cache : bool, optional
+            If ``True`` (default) and ``processed`` is ``True``, use the
+            processing cache.
+        fmax : float or None, optional
+            Maximum frequency shown on the plot (in Hz). If ``None``, the
+            full frequency range is used. Default is ``50.0``.
+        **welch_kwargs
+            Additional keyword arguments forwarded to :meth:`welch_psd` and
+            then to :func:`scipy.signal.welch`.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            Axes instance containing the PSD plot.
         """
         spec = self.welch_psd(processed=processed, use_cache=use_cache, **welch_kwargs)
         return spec.plot(ax=ax, fmax=fmax)
@@ -995,7 +1499,34 @@ class Channel:
         """
         Plot the Arias intensity time history (Husid plot) for this channel.
 
-        Data is assumed to be acceleration in g.
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on. If ``None``, a new figure and axes are created.
+        g : float, optional
+            Gravity acceleration used to convert acceleration from g to m/s².
+            Default is ``9.81``.
+        processed : bool, optional
+            If ``True`` (default), compute Arias intensity from processed
+            acceleration; otherwise use raw data.
+        use_cache : bool, optional
+            If ``True`` (default) and ``processed`` is ``True``, use the
+            processing cache.
+        show_window : bool, optional
+            If ``True`` (default), plot vertical lines marking the 5–95%
+            significant-duration window.
+        **plot_kwargs
+            Additional keyword arguments forwarded to
+            :meth:`AriasResult.plot`.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            Axes instance containing the Arias intensity plot.
+
+        Notes
+        -----
+        The channel data are assumed to represent acceleration in units of g.
         """
         res = self.arias_intensity(g=g, processed=processed, use_cache=use_cache)
         return res.plot(ax=ax, show_window=show_window, **plot_kwargs)
@@ -1014,6 +1545,41 @@ class Channel:
     ) -> plt.Axes:
         """
         Plot the elastic response spectrum for this channel.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on. If ``None``, a new figure and axes are created.
+        periods : np.ndarray, optional
+            One-dimensional array of natural periods (in seconds) at which
+            the spectrum is evaluated. Default is
+            ``np.linspace(0.05, 5.0, 100)``.
+        ksi : float, optional
+            Damping ratio of the SDOF systems (for example ``0.05`` for 5%
+            damping). Default is ``0.05``.
+        processed : bool, optional
+            If ``True`` (default), compute the spectrum from processed data;
+            otherwise use raw data.
+        use_cache : bool, optional
+            If ``True`` (default) and ``processed`` is ``True``, use the
+            processing cache.
+        y : {"Sa", "Sv", "Sd"}, optional
+            Response quantity to plot: spectral acceleration ``"Sa"``, velocity
+            ``"Sv"`` or displacement ``"Sd"``. Default is ``"Sa"``.
+        logx : bool, optional
+            If ``True``, use a logarithmic scale on the x-axis (period).
+            Default is ``False``.
+        logy : bool, optional
+            If ``True``, use a logarithmic scale on the y-axis (response).
+            Default is ``False``.
+        **plot_kwargs
+            Additional keyword arguments forwarded to
+            :meth:`ResponseSpectrum.plot`.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            Axes instance containing the response spectrum plot.
         """
         rs = self.response_spectrum(
             periods=periods,

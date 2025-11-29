@@ -8,20 +8,25 @@ import matplotlib.pyplot as plt
 
 @dataclass
 class ResponseSpectrum:
-    """Elastic response spectrum for a family of SDOF oscillators.
+    """
+    Elastic response spectrum for a family of SDOF oscillators.
+
+    This dataclass stores spectral displacement, velocity and acceleration
+    for a set of single-degree-of-freedom (SDOF) oscillators with the same
+    damping ratio, evaluated over a grid of natural periods.
 
     Parameters
     ----------
     T : np.ndarray
-        Natural periods in seconds.
+        One-dimensional array of natural periods in seconds.
     Sd : np.ndarray
-        Spectral displacement values in metres.
+        Spectral displacement values in metres (same shape as ``T``).
     Sv : np.ndarray
-        Spectral velocity values in metres per second.
+        Spectral velocity values in metres per second (same shape as ``T``).
     Sa : np.ndarray
-        Spectral pseudo-acceleration values in g.
+        Spectral pseudo-acceleration values in g (same shape as ``T``).
     ksi : float
-        Damping ratio used to compute the spectrum.
+        Damping ratio used to compute the spectrum (e.g. 0.05 for 5%).
     """
 
     T: np.ndarray
@@ -31,14 +36,15 @@ class ResponseSpectrum:
     ksi: float
 
     def peak(self) -> tuple[float, float]:
-        """Return the dominant period and its peak spectral acceleration.
+        """
+        Return the dominant period and peak spectral acceleration.
 
         Returns
         -------
         T_peak : float
-            Period at which ``Sa`` is maximum.
+            Period at which ``Sa`` attains its maximum value.
         Sa_peak : float
-            Maximum spectral acceleration value.
+            Maximum spectral acceleration value in g.
 
         Raises
         ------
@@ -60,25 +66,35 @@ class ResponseSpectrum:
         logy: bool = False,
         **plot_kwargs: Any,
     ) -> plt.Axes:
-        """Plot one of the response spectra (Sa, Sv or Sd).
+        """
+        Plot one of the response spectra (Sa, Sv or Sd).
 
         Parameters
         ----------
         ax : matplotlib.axes.Axes, optional
             Axes to plot on. If ``None``, a new figure and axes are created.
-        y : {'Sa', 'Sv', 'Sd'}, optional
-            Which spectrum to plot: ``Sa`` (default), ``Sv``, or ``Sd``.
+        y : {"Sa", "Sv", "Sd"}, optional
+            Which spectrum to plot: spectral acceleration ``"Sa"`` (default),
+            velocity ``"Sv"``, or displacement ``"Sd"``.
         logx : bool, optional
-            Use logarithmic x-axis if ``True``.
+            If ``True``, use a logarithmic scale on the x-axis. Default is
+            ``False``.
         logy : bool, optional
-            Use logarithmic y-axis if ``True``.
+            If ``True``, use a logarithmic scale on the y-axis. Default is
+            ``False``.
         **plot_kwargs
-            Extra keyword arguments forwarded to ``ax.plot``.
+            Additional keyword arguments forwarded to :meth:`matplotlib.axes.Axes.plot`
+            (for example ``color``, ``linewidth``, etc.).
 
         Returns
         -------
         matplotlib.axes.Axes
-            The axes with the plotted spectrum.
+            Axes instance containing the plotted spectrum.
+
+        Raises
+        ------
+        ValueError
+            If ``y`` is not one of ``"Sa"``, ``"Sv"``, or ``"Sd"``.
         """
         if ax is None:
             _, ax = plt.subplots()
@@ -114,25 +130,38 @@ def sdof_newmark_response(
     """
     Newmark-beta (average-acceleration) SDOF response to base acceleration.
 
+    This function integrates the response of a linear single-degree-of-freedom
+    (SDOF) oscillator subjected to ground acceleration using the Newmark-beta
+    average-acceleration scheme, and returns peak relative displacement,
+    relative velocity and absolute acceleration.
+
     Parameters
     ----------
     acc : np.ndarray
-        Ground acceleration time history a_g(t) in m/s^2.
+        Ground acceleration time history :math:`a_g(t)` in m/s².
     dt : float
         Time step in seconds.
     omega : float
-        Circular frequency (rad/s).
+        Circular frequency of the oscillator in rad/s.
     ksi : float
-        Damping ratio.
+        Damping ratio (e.g. 0.05 for 5% damping).
 
     Returns
     -------
     Sd : float
-        Peak relative displacement in metres.
+        Peak relative displacement in metres (maximum absolute value of
+        relative displacement time history).
     Sv : float
         Peak relative velocity in metres per second.
     Sa : float
-        Peak absolute acceleration in m/s^2.
+        Peak absolute acceleration in m/s² (sum of relative and ground
+        acceleration).
+
+    Notes
+    -----
+    * A unit mass :math:`m = 1` is assumed, with stiffness ``k = m * omega**2``
+      and viscous damping ``c = 2 * ksi * omega * m``.
+    * If the input acceleration array is empty, all returned values are 0.0.
     """
     n = len(acc)
     if n == 0:
