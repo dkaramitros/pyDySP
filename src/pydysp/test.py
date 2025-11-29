@@ -6,12 +6,11 @@ from typing import (
     Dict,
     Iterable,
     List,
+    Literal,
     Mapping,
     Optional,
     Sequence,
-    Tuple,
     Union,
-    Literal,
 )
 
 import csv
@@ -36,7 +35,7 @@ class Test:
     Features
     --------
     - Store experiment-level metadata (name, description, source file, timestamp).
-    - Manage a collection of `Channel` objects (selection, grouping, renaming). :contentReference[oaicite:0]{index=0}
+    - Manage a collection of `Channel` objects (selection, grouping, renaming).
     - Provide experiment-level processing:
         * Batch processing: drift correction, filtering, baseline correction, trimming.
         * Pairwise analysis: transfer functions, time delays, cross-spectra.
@@ -934,10 +933,6 @@ class Test:
     # Batch processing
     # ------------------------------------------------------------------ #
 
-    # ------------------------------------------------------------------ #
-    # Batch processing (experiment-level wrappers)
-    # ------------------------------------------------------------------ #
-
     def drift_corrected(
         self,
         selector: ChannelSelector = None,
@@ -1509,7 +1504,7 @@ class Test:
         self,
         x: ChannelKey,
         y: ChannelKey,
-        kind: str = "H1",
+        kind: Literal["H1", "H2"] = "H1",
         processed: bool = True,
         use_cache: bool = True,
         **kwargs: Any,
@@ -1672,7 +1667,7 @@ class Test:
         self,
         input: ChannelKey,
         outputs: ChannelSelector,
-        kind: str = "H1",
+        kind: Literal["H1", "H2"] = "H1",
         processed: bool = True,
         use_cache: bool = True,
         **model_kwargs: Any,
@@ -1713,7 +1708,7 @@ class Test:
 
         Typical usage
         -------------
-        After constructing the model with ``test.ema(...)``:
+        After constructing the model with ``test.ema_model(...)``:
 
         1) Get poles (LSCF)::
                model.get_poles()
@@ -1789,6 +1784,7 @@ class Test:
             raise ValueError("layout must not be empty.")
         first = layout[0]
         if not isinstance(first, (list, tuple)):
+            # 1D layout -> single row
             rows = [list(layout)]
         else:
             rows = [list(row) for row in layout]
@@ -1803,10 +1799,87 @@ class Test:
             normalized.append(row)
         return normalized
 
+    def _plot_one_channel(
+        self,
+        ch: Channel,
+        ax: plt.Axes,
+        plot_type: str,
+        multi: bool,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Internal helper to route plot_type to the appropriate Channel method.
+
+        For multi-channel axes, use a generic kind label + legend.
+        For single-channel axes, use the channel's axis label.
+        """
+        # Decide label behaviour
+        if multi:
+            # Generic kind on the y-axis, individual lines distinguished by legend
+            include_label = False
+            include_kind = True
+            include_legend = True
+        else:
+            include_label = True
+            include_kind = False
+            include_legend = False
+        pt = plot_type.lower()
+        if pt in ("time", "timehistory", "time_history"):
+            ch.plot(
+                ax=ax,
+                include_label=include_label,
+                include_kind=include_kind,
+                include_legend=include_legend,
+                **kwargs,
+            )
+        elif pt in ("fourier", "fft"):
+            ch.plot_fourier(
+                ax=ax,
+                **kwargs,
+            )
+            # Fourier plot uses its own labels; legend optional for multi
+            if multi:
+                # Add a legend entry using the line label that Channel.plot would use
+                line_label = ch.label_legend or ch.name_user or ch.name_input
+                if line_label:
+                    for line in ax.get_lines():
+                        if line.get_label() == "_nolegend_":
+                            line.set_label(line_label)
+                            break
+                    ax.legend()
+        elif pt in ("psd", "welch", "power"):
+            ch.plot_psd(
+                ax=ax,
+                **kwargs,
+            )
+            if multi:
+                line_label = ch.label_legend or ch.name_user or ch.name_input
+                if line_label:
+                    for line in ax.get_lines():
+                        if line.get_label() == "_nolegend_":
+                            line.set_label(line_label)
+                            break
+                    ax.legend()
+        elif pt in ("arias", "husid"):
+            ch.plot_arias(
+                ax=ax,
+                **kwargs,
+            )
+        elif pt in ("response", "response_spectrum", "rs"):
+            ch.plot_response_spectrum(
+                ax=ax,
+                **kwargs,
+            )
+        else:
+            raise ValueError(
+                f"Unknown plot_type {plot_type!r}. "
+                "Use 'timehistory', 'fourier', 'psd', 'arias', 'response', etc."
+            )
+
     def plot_grid(
         self,
         layout: Any,
-        plot_type: str = "Timehistory",
+        plot_type: str = "timehistory",
         sharex: bool = True,
         sharey: bool = True,
         title_suffix: str | None = None,
@@ -1840,7 +1913,9 @@ class Test:
             Layout specification as described above (nested lists/tuples of
             ChannelKey or Channel, optionally with None cells).
         plot_type : str, optional
-            Plot type forwarded to :meth:`Channel.plot` (default "Timehistory").
+            Plot type: "timehistory" (time), "fourier", "psd", "arias",
+            "response", etc. This is mapped to the corresponding Channel
+            plotting method.
         sharex : bool, optional
             If True (default), subplots share the same x-axis.
         sharey : bool, optional
@@ -1852,7 +1927,8 @@ class Test:
             If True, the function also returns a suggested figure caption string
             as a third return value.
         **kwargs :
-            Additional keyword arguments forwarded to :meth:`Channel.plot`.
+            Additional keyword arguments forwarded to the underlying Channel
+            plotting method (e.g. processed=False, fmax=..., etc).
 
         Returns
         -------
@@ -1898,28 +1974,14 @@ class Test:
                     channels.append(ch)
                     all_channels.append(ch)
                 multi = len(channels) > 1
-                first = True
                 for ch in channels:
-                    if multi:
-                        ch.plot(
-                            plot_type=plot_type,
-                            name=False,
-                            description=False,
-                            typey=True,
-                            axis=ax,
-                            label=ch.name,
-                            **kwargs,
-                        )
-                    else:
-                        ch.plot(
-                            plot_type=plot_type,
-                            axis=ax,
-                            **kwargs,
-                        )
-                    if first:
-                        first = False
-                if multi:
-                    ax.legend()
+                    self._plot_one_channel(
+                        ch=ch,
+                        ax=ax,
+                        plot_type=plot_type,
+                        multi=multi,
+                        **kwargs,
+                    )
         full_title = (
             self.name if title_suffix is None else f"{self.name}: {title_suffix}"
         )
@@ -1932,9 +1994,10 @@ class Test:
                 if id(ch) not in seen:
                     seen.add(id(ch))
                     uniq_channels.append(ch)
-            channel_names = ", ".join(ch.name for ch in uniq_channels)
+            channel_names = ", ".join(
+                ch.name_user or ch.name_input or "<unnamed>" for ch in uniq_channels
+            )
             caption = f"{full_title}. {plot_type} plots of channels: {channel_names}."
-        if make_caption:
             return fig, axes, caption
         return fig, axes
 
@@ -1942,7 +2005,7 @@ class Test:
         self,
         selector: Any,
         ncols: int = 3,
-        plot_type: str = "Timehistory",
+        plot_type: str = "timehistory",
         sharex: bool = True,
         sharey: bool = True,
         title_suffix: str | None = None,
@@ -1955,37 +2018,6 @@ class Test:
         Channels are selected via the given selector and arranged row-wise into
         subplots with ``ncols`` columns. This is convenient for plotting many
         similar channels (e.g. all accelerograms) at once.
-
-        Parameters
-        ----------
-        selector :
-            Selector for channels (index, name, list, slice, tag-based selector,
-            etc.) passed to :meth:`iter_channels`.
-        ncols : int, optional
-            Number of subplot columns (default 3).
-        plot_type : str, optional
-            Plot type forwarded to :meth:`Channel.plot` (default "Timehistory").
-        sharex : bool, optional
-            If True (default), subplots share the same x-axis.
-        sharey : bool, optional
-            If True (default), subplots share the same y-axis range.
-        title_suffix : str or None, optional
-            Optional suffix to append to the Test name for the figure title,
-            passed on to :meth:`plot_grid`.
-        make_caption : bool, optional
-            If True, a suggested figure caption string is also returned.
-        **kwargs :
-            Additional keyword arguments forwarded to :meth:`Channel.plot`.
-
-        Returns
-        -------
-        fig : matplotlib.figure.Figure
-            The created Figure.
-        axes : numpy.ndarray
-            2D array of Axes objects with shape (n_rows, ncols).
-        caption : str, optional
-            If ``make_caption`` is True, a suggested figure caption is returned
-            as a third element.
         """
         channels = list(self.iter_channels(selector))
         if not channels:
