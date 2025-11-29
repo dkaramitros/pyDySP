@@ -61,7 +61,6 @@ If using Jupyter notebooks:
 
 ```bash
 pip install ipykernel
-python -m ipykernel install --user --name pydysp-env
 ```
 
 ### Option B — Developer installation (editable)
