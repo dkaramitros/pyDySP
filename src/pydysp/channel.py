@@ -14,14 +14,26 @@ from .response import ResponseSpectrum, sdof_newmark_response
 
 @dataclass
 class Channel:
-    """
-    Single time-history channel with metadata and processing parameters.
+    """Single time-history channel with metadata and processing parameters.
 
-    Stores raw 1D data and time information and provides non-destructive
-    processing (drift, filter, baseline, trim), spectra, Arias intensity,
-    response spectra and plotting utilities. Processing methods return
-    new Channel instances; processed() returns (time, data) with current
-    parameters applied.
+    Parameters
+    ----------
+    data : np.ndarray
+        1-D array of raw signal values.
+    dt : float, optional
+        Sampling interval in seconds. If not provided, a ``time`` array
+        must be supplied.
+    t0 : float, optional
+        Start time in seconds (used when constructing ``time`` from ``dt``).
+    time : np.ndarray, optional
+        Explicit time array matching ``data`` in shape.
+
+    Notes
+    -----
+    The class stores processing parameters (drift, filter, baseline, trim)
+    and supports non-destructive processing: methods that change processing
+    parameters return new ``Channel`` instances. Use ``processed()`` to
+    obtain the time and data arrays with all current processing applied.
     """
 
     # Default processing parameters
@@ -96,13 +108,17 @@ class Channel:
         # Ensure data is a 1D NumPy array
         self.data = np.asarray(self.data)
         if self.data.ndim != 1:
-            raise ValueError("Channel.data must be a 1D array (single time history)")
+            raise ValueError(
+                f"Channel.data must be a 1D array (single time history), got shape {self.data.shape!r}"
+            )
 
         # Handle time / dt relationship
         if self.time is not None:
             self.time = np.asarray(self.time)
             if self.time.shape != self.data.shape:
-                raise ValueError("Time and data must have the same shape")
+                raise ValueError(
+                    f"Time and data must have the same shape; got time.shape={self.time.shape!r}, data.shape={self.data.shape!r}"
+                )
             if self.dt is None and len(self.time) > 1:
                 self.dt = float(self.time[1] - self.time[0])
             if self.t0 == 0.0 and len(self.time) > 0:
@@ -111,7 +127,7 @@ class Channel:
             if self.dt is None:
                 raise ValueError("Either 'time' or 'dt' must be provided")
             if self.dt <= 0:
-                raise ValueError("dt must be positive")
+                raise ValueError(f"dt must be positive, got {self.dt!r}")
             n = self.data.shape[0]
             self.time = self.t0 + self.dt * np.arange(n)
 
@@ -147,8 +163,12 @@ class Channel:
     # ------------------------------------------------------------------ #
 
     def info(self) -> str:
-        """
-        Return a clean, human-readable summary of channel metadata.
+        """Return a clean, human-readable summary of channel metadata.
+
+        Returns
+        -------
+        str
+            Multi-line human-readable summary suitable for printing.
         """
         lines = []
         # Header
@@ -239,11 +259,17 @@ class Channel:
     # ------------------------------------------------------------------ #
 
     def drift_corrected(self, **override: Any) -> "Channel":
-        """
-        Return a new Channel with updated drift parameters.
+        """Return a new Channel with updated drift correction parameters.
 
-        Actual correction is applied in processed().
-        Defaults: {"points": 50}
+        Parameters
+        ----------
+        **override :
+            Keyword arguments forwarded to the stored drift parameters.
+
+        Notes
+        -----
+        The actual correction is applied lazily in ``processed()``; this
+        method only updates the parameters and returns a new ``Channel``.
         """
         params = {**self.DRIFT_DEFAULTS, **self.drift_params, **override}
         new = replace(self, drift_params=params)
@@ -256,11 +282,17 @@ class Channel:
         return new
 
     def filtered(self, **override: Any) -> "Channel":
-        """
-        Return a new Channel with updated Butterworth filter parameters.
+        """Return a new Channel with updated Butterworth filter parameters.
 
-        Actual filtering is applied in processed().
-        Defaults: {"btype": "lowpass", "fc": 50.0, "order": 2}
+        Parameters
+        ----------
+        **override :
+            Keyword arguments forwarded to the stored filter parameters.
+
+        Notes
+        -----
+        Actual filtering is applied in ``processed()``; this method only
+        records the requested filter specification.
         """
         params = {**self.FILTER_DEFAULTS, **self.filter_params, **override}
         new = replace(self, filter_params=params)
@@ -273,11 +305,13 @@ class Channel:
         return new
 
     def baseline_corrected(self, **override: Any) -> "Channel":
-        """
-        Return a new Channel with updated baseline correction parameters.
+        """Return a new Channel with updated baseline correction parameters.
 
-        Actual detrending is applied in processed().
-        Defaults: {"type": "linear"}
+        Parameters
+        ----------
+        **override :
+            Keyword arguments forwarded to the baseline correction method
+            (passed to ``scipy.signal.detrend`` when applied).
         """
         params = {**self.BASELINE_DEFAULTS, **self.baseline_params, **override}
         new = replace(self, baseline_params=params)
@@ -291,10 +325,13 @@ class Channel:
         return new
 
     def trimmed(self, **override: Any) -> "Channel":
-        """
-        Return a new Channel with updated trim window parameters.
+        """Return a new Channel with updated trim window parameters.
 
-        Actual trimming is applied in processed().
+        Parameters
+        ----------
+        **override :
+            Keyword arguments typically including ``t_start`` and ``t_end``
+            (in seconds) that define the trimming window.
         """
         defaults = {
             "t_start": float(self.time[0]),
@@ -334,13 +371,13 @@ class Channel:
         """
         t, y = self.xy(processed=processed, use_cache=use_cache)
         if y.size == 0:
-            raise ValueError("Cannot trim empty signal")
+            raise ValueError("Cannot trim empty signal: channel has zero samples")
         if use_abs:
             mask = np.abs(y) >= threshold
         else:
             mask = y >= threshold
         if not np.any(mask):
-            raise ValueError("No samples exceed the specified threshold")
+            raise ValueError(f"No samples exceed the specified threshold ({threshold})")
         i_start = int(np.argmax(mask))
         i_end = int(len(mask) - 1 - np.argmax(mask[::-1]))
         t_start = float(t[i_start]) - buffer_before
@@ -349,7 +386,9 @@ class Channel:
         t_start = max(t_start, float(t[0]))
         t_end = min(t_end, float(t[-1]))
         if t_end <= t_start:
-            raise ValueError("Computed trim window is empty after buffering")
+            raise ValueError(
+                f"Computed trim window is empty after buffering: t_start={t_start}, t_end={t_end}"
+            )
         return self.trimmed(t_start=t_start, t_end=t_end)
 
     def trim_by_fraction_of_peak(
@@ -367,17 +406,17 @@ class Channel:
         of its peak amplitude.
         """
         if not (0.0 < fraction <= 1.0):
-            raise ValueError("fraction must be in (0, 1]")
+            raise ValueError(f"fraction must be in (0, 1], got {fraction!r}")
         _, y = self.xy(processed=processed, use_cache=use_cache)
         if y.size == 0:
-            raise ValueError("Cannot trim empty signal")
+            raise ValueError("Cannot trim empty signal: channel has zero samples")
         if use_abs:
             peak = float(np.max(np.abs(y)))
         else:
             peak = float(np.max(y))
         if peak <= 0.0:
             raise ValueError(
-                "Signal peak is non-positive; cannot define threshold from peak"
+                f"Signal peak is non-positive ({peak}); cannot define threshold from peak"
             )
         threshold = fraction * peak
         return self.trim_by_threshold(
@@ -406,7 +445,9 @@ class Channel:
         Data is assumed to be acceleration in g.
         """
         if not (0.0 <= lower < upper <= 1.0):
-            raise ValueError("Require 0 <= lower < upper <= 1")
+            raise ValueError(
+                f"Require 0 <= lower < upper <= 1, got lower={lower!r}, upper={upper!r}"
+            )
         res = self.arias_intensity(g=g, processed=processed, use_cache=use_cache)
         t = res.t
         Ia = res.Ia
@@ -414,7 +455,7 @@ class Channel:
             raise ValueError("Cannot trim by Arias intensity for empty signal")
         Ia_final = float(Ia[-1])
         if Ia_final <= 0.0:
-            raise ValueError("Final Arias intensity is non-positive")
+            raise ValueError(f"Final Arias intensity is non-positive ({Ia_final})")
         # Find indices where cumulative Arias crosses the requested fractions
         idx_lower = int(np.argmax(Ia >= lower * Ia_final))
         idx_upper = int(np.argmax(Ia >= upper * Ia_final))
@@ -424,7 +465,9 @@ class Channel:
         t_lower = max(t_lower, float(t[0]))
         t_upper = min(t_upper, float(t[-1]))
         if t_upper <= t_lower:
-            raise ValueError("Computed Arias trim window is empty after buffering")
+            raise ValueError(
+                f"Computed Arias trim window is empty after buffering: t_start={t_lower}, t_end={t_upper}"
+            )
         return self.trimmed(t_start=t_lower, t_end=t_upper)
 
     # ------------------------------------------------------------------ #
@@ -432,17 +475,26 @@ class Channel:
     # ------------------------------------------------------------------ #
 
     def processed(self, use_cache: bool = True) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Return (time, data) after applying current processing steps.
+        """Return ``(time, data)`` after applying current processing steps.
 
-        Processing order:
-        1) drift correction
-        2) Butterworth filter
-        3) baseline detrend
-        4) trimming (t_start, t_end)
-        5) calibration_factor scaling
+        Processing order
+        ----------------
+        1. Drift correction
+        2. Butterworth filter
+        3. Baseline detrend
+        4. Trimming (``t_start``, ``t_end``)
+        5. Calibration-factor scaling
 
-        Returns: (time, data) numpy arrays.
+        Parameters
+        ----------
+        use_cache : bool, optional
+            If True (default), cached processed results are returned when
+            available and the processing signature matches.
+
+        Returns
+        -------
+        t, y : tuple
+            Time and data arrays after processing.
         """
         signature = (
             tuple(sorted(self.drift_params.items())),
@@ -467,14 +519,16 @@ class Channel:
             points = params["points"]
             if points > len(y):
                 raise ValueError(
-                    "Number of points for drift correction exceeds data length"
+                    f"Number of points for drift correction ({points}) exceeds data length ({len(y)})"
                 )
             drift_value = float(np.mean(y[:points]))
             y = y - drift_value
         # 2. Filtering
         if self.filter_params:
             if self.dt is None or self.dt <= 0:
-                raise ValueError("Filtering requires a positive dt (sampling interval)")
+                raise ValueError(
+                    f"Filtering requires a positive dt, got dt={self.dt!r}"
+                )
             fs = 1.0 / self.dt
             params = {**self.FILTER_DEFAULTS, **self.filter_params}
             btype = params["btype"]
@@ -486,21 +540,21 @@ class Channel:
                 f1 = params.get("f1")
                 f2 = params.get("f2")
                 if f1 is None or f2 is None:
-                    raise ValueError("Band filters require f1 and f2")
+                    raise ValueError(
+                        f"Band filters require f1 and f2, got f1={f1!r}, f2={f2!r}"
+                    )
                 Wn = [2 * f1 / fs, 2 * f2 / fs]
             else:
                 raise ValueError(f"Unsupported filter mode: {btype!r}")
             if isinstance(Wn, (list, tuple)):
                 if not (0 < Wn[0] < Wn[1] < 1):
                     raise ValueError(
-                        "Normalized band edges must satisfy 0 < f1 < f2 < fs/2; "
-                        f"got Wn={Wn} with fs={fs}"
+                        f"Normalized band edges must satisfy 0 < f1 < f2 < fs/2; got Wn={Wn} with fs={fs}"
                     )
             else:
                 if not (0 < Wn < 1):
                     raise ValueError(
-                        "Normalized cutoff must satisfy 0 < fc < fs/2; "
-                        f"got Wn={Wn} with fs={fs}"
+                        f"Normalized cutoff must satisfy 0 < fc < fs/2; got Wn={Wn} with fs={fs}"
                     )
             b, a = butter(order, Wn, btype=btype)
             y = filtfilt(b, a, y)
@@ -515,10 +569,14 @@ class Channel:
             t_start = params["t_start"]
             t_end = params["t_end"]
             if t_end <= t_start:
-                raise ValueError("t_end must be greater than t_start")
+                raise ValueError(
+                    f"t_end must be greater than t_start: t_start={t_start}, t_end={t_end}"
+                )
             mask = (t >= t_start) & (t <= t_end)
             if not np.any(mask):
-                raise ValueError("Trim window does not overlap channel time range")
+                raise ValueError(
+                    f"Trim window [{t_start}, {t_end}] does not overlap channel time range [{float(t[0])}, {float(t[-1])}]"
+                )
             t = t[mask]
             y = y[mask]
         # 5. Calibration

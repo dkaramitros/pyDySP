@@ -8,19 +8,24 @@ import matplotlib.pyplot as plt
 
 @dataclass
 class AriasResult:
-    """
-    Arias intensity result and significant-duration window.
+    """Arias intensity time history and significant-duration window.
 
-    Attributes
+    Parameters
     ----------
     t : np.ndarray
-        Time array.
+        Time array corresponding to the input acceleration signal.
     Ia : np.ndarray
-        Cumulative Arias intensity.
-    t_start: float
-        Time corresponding to the chosen lower fraction (e.g. 5%).
-    t_end: float
-        Time corresponding to the chosen upper fraction (e.g. 95%).
+        Cumulative Arias intensity evaluated at times ``t``.
+    t_start : float
+        Start time of the significant-duration window (e.g. 5% point).
+    t_end : float
+        End time of the significant-duration window (e.g. 95% point).
+
+    Notes
+    -----
+    The object stores the Husid-style cumulative Arias intensity and
+    is primarily used for plotting and extracting the significant-duration
+    window for trimming or analysis.
     """
 
     t: np.ndarray
@@ -34,22 +39,22 @@ class AriasResult:
         show_window: bool = True,
         **plot_kwargs: Any,
     ) -> plt.Axes:
-        """
-        Plot the Arias intensity time history (Husid plot).
+        """Plot the Arias intensity time history.
 
         Parameters
         ----------
         ax : matplotlib.axes.Axes, optional
-            Axes to plot on. If None, a new figure and axes are created.
+            Axes to plot on. If ``None``, a new figure and axes are created.
         show_window : bool, optional
-            If True, draw vertical lines at t_start and t_end.
+            If ``True``, vertical dashed lines are drawn at ``t_start`` and
+            ``t_end`` to indicate the significant-duration window.
         **plot_kwargs
-            Extra keyword arguments forwarded to ax.plot().
+            Extra keyword arguments forwarded to ``ax.plot``.
 
         Returns
         -------
         matplotlib.axes.Axes
-            The axes with the plot.
+            The axes with the plotted Arias intensity.
         """
         if ax is None:
             _, ax = plt.subplots()

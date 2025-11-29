@@ -8,21 +8,20 @@ import matplotlib.pyplot as plt
 
 @dataclass
 class ResponseSpectrum:
-    """
-    Elastic response spectrum for a family of SDOF oscillators.
+    """Elastic response spectrum for a family of SDOF oscillators.
 
-    Attributes
+    Parameters
     ----------
     T : np.ndarray
-        Natural periods (s).
+        Natural periods in seconds.
     Sd : np.ndarray
-        Spectral displacement [m].
+        Spectral displacement values in metres.
     Sv : np.ndarray
-        Spectral velocity [m/s].
+        Spectral velocity values in metres per second.
     Sa : np.ndarray
-        Pseudo-acceleration [g].
+        Spectral pseudo-acceleration values in g.
     ksi : float
-        Damping ratio used for the spectrum.
+        Damping ratio used to compute the spectrum.
     """
 
     T: np.ndarray
@@ -32,18 +31,24 @@ class ResponseSpectrum:
     ksi: float
 
     def peak(self) -> tuple[float, float]:
-        """
-        Return the dominant period and its corresponding peak spectral acceleration.
+        """Return the dominant period and its peak spectral acceleration.
 
         Returns
         -------
         T_peak : float
-            Period at which Sa is maximum.
+            Period at which ``Sa`` is maximum.
         Sa_peak : float
             Maximum spectral acceleration value.
+
+        Raises
+        ------
+        ValueError
+            If the spectral acceleration array ``Sa`` is empty.
         """
         if self.Sa.size == 0:
-            raise ValueError("Empty response spectrum has no peak")
+            raise ValueError(
+                "Response spectrum is empty; cannot determine peak period and acceleration"
+            )
         idx = int(np.argmax(self.Sa))
         return float(self.T[idx]), float(self.Sa[idx])
 
@@ -55,26 +60,25 @@ class ResponseSpectrum:
         logy: bool = False,
         **plot_kwargs: Any,
     ) -> plt.Axes:
-        """
-        Plot the response spectrum.
+        """Plot one of the response spectra (Sa, Sv or Sd).
 
         Parameters
         ----------
         ax : matplotlib.axes.Axes, optional
-            Axes to plot on. If None, a new figure and axes are created.
+            Axes to plot on. If ``None``, a new figure and axes are created.
         y : {'Sa', 'Sv', 'Sd'}, optional
-            Which spectrum to plot: Sa (default), Sv, or Sd.
+            Which spectrum to plot: ``Sa`` (default), ``Sv``, or ``Sd``.
         logx : bool, optional
-            Use logarithmic x-axis if True.
+            Use logarithmic x-axis if ``True``.
         logy : bool, optional
-            Use logarithmic y-axis if True.
+            Use logarithmic y-axis if ``True``.
         **plot_kwargs
             Extra keyword arguments forwarded to ``ax.plot``.
 
         Returns
         -------
         matplotlib.axes.Axes
-            The axes with the plot.
+            The axes with the plotted spectrum.
         """
         if ax is None:
             _, ax = plt.subplots()
@@ -110,25 +114,25 @@ def sdof_newmark_response(
     """
     Newmark-beta (average-acceleration) SDOF response to base acceleration.
 
-    Inputs
+    Parameters
     ----------
     acc : np.ndarray
-        Ground acceleration time history a_g(t) in m/s^2
+        Ground acceleration time history a_g(t) in m/s^2.
     dt : float
-        Time step in s
+        Time step in seconds.
     omega : float
-        Circular frequency (rad/s)
+        Circular frequency (rad/s).
     ksi : float
-        Damping ratio
+        Damping ratio.
 
     Returns
     -------
     Sd : float
-        Peak relative displacement [m]
+        Peak relative displacement in metres.
     Sv : float
-        Peak relative velocity [m/s]
+        Peak relative velocity in metres per second.
     Sa : float
-        Peak absolute acceleration [m/s^2]
+        Peak absolute acceleration in m/s^2.
     """
     n = len(acc)
     if n == 0:

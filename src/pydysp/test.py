@@ -29,14 +29,31 @@ ChannelSelector = Union[ChannelKey, Sequence[ChannelKey], slice, None]
 
 @dataclass
 class Test:
-    """
-    Experiment container for multiple time-history channels.
+    """Container for an experiment composed of multiple time-history channels.
 
-    Holds metadata and an ordered list of Channel objects and provides:
-    - selection helpers and tags,
-    - batch processing (drift, filter, baseline, trim),
-    - pairwise analyses (cross-spectrum, transfer function, time delay),
-    - basic EMA model construction, plotting and common I/O (MAT/CSV).
+    The ``Test`` object stores an ordered list of :class:`Channel` instances
+    together with test-level metadata (name, description, source file,
+    timestamp, tags, and arbitrary ``meta``). It provides helpers for
+    selecting channels, batch processing (drift/filter/baseline/trim),
+    pairwise spectral analyses, simple modal identification glue, plotting,
+    and common I/O routines (MAT/CSV).
+
+    Parameters
+    ----------
+    name : str
+        Human-readable name for the test.
+    description : str, optional
+        Longer description of the test.
+    source_file : str, optional
+        Path or identifier of the primary data file used to build this Test.
+    timestamp : str, optional
+        String representation of the test date/time.
+    channels : list[Channel], optional
+        Ordered list of :class:`Channel` objects belonging to this Test.
+    tags : set[str], optional
+        Free-form tags for grouping and filtering tests.
+    meta : dict, optional
+        Free-form metadata dictionary.
     """
 
     # Name of the experiment (e.g. 'Shaking table Test 07').
@@ -165,7 +182,8 @@ class Test:
             base = tmp
         else:
             raise TypeError(
-                "Unsupported selector type for iter_channels: " f"{type(selector)!r}"
+                f"Unsupported selector type for iter_channels: {type(selector)!r}. "
+                "Expected int, str, Channel, slice, Sequence or None."
             )
         # Tag-based filtering
         if tags is None:
@@ -245,10 +263,12 @@ class Test:
         # Length of the first channel's data
         n0 = self.channels[0].data.shape[0]
         # Check all other channels match
-        for ch in self.channels[1:]:
+        for i, ch in enumerate(self.channels[1:], start=1):
             n_i = ch.data.shape[0]
             if n_i != n0:
-                raise ValueError("Channels have differing numbers of samples.")
+                raise ValueError(
+                    f"Channels have differing numbers of samples: channel 0 has {n0}, channel {i} has {n_i}"
+                )
         return n0
 
     @property
@@ -273,10 +293,12 @@ class Test:
         # Determine duration of the first channel
         dur0 = self.channels[0].time[-1] - self.channels[0].time[0]
         # Check consistency with all other channels
-        for ch in self.channels[1:]:
+        for i, ch in enumerate(self.channels[1:], start=1):
             dur_i = ch.time[-1] - ch.time[0]
             if not np.isclose(dur_i, dur0, rtol=1e-6, atol=1e-12):
-                raise ValueError("Channels have inconsistent durations.")
+                raise ValueError(
+                    f"Channels have inconsistent durations: channel 0 duration={dur0}, channel {i} duration={dur_i}"
+                )
         return float(dur0)
 
     @property
@@ -294,9 +316,11 @@ class Test:
         # Reference dt from the first channel
         dt0 = self.channels[0].dt
         # Check consistency with all other channels
-        for ch in self.channels[1:]:
+        for i, ch in enumerate(self.channels[1:], start=1):
             if not np.isclose(ch.dt, dt0, rtol=1e-6, atol=1e-12):
-                raise ValueError("Inconsistent dt across channels.")
+                raise ValueError(
+                    f"Inconsistent dt across channels: channel 0 dt={dt0}, channel {i} dt={ch.dt}"
+                )
         return dt0
 
     # ------------------------------------------------------------------ #
@@ -1203,7 +1227,7 @@ class Test:
         # Apply same window to all selected channels
         new_channels: list[Channel] = []
         for ch in self.channels:
-            if ch in selected:
+            if any(ch is s for s in selected):
                 new_channels.append(ch.trimmed(t_start=t_start, t_end=t_end))
             else:
                 new_channels.append(ch)
@@ -1304,7 +1328,7 @@ class Test:
         # Apply same window to all selected channels
         new_channels: list[Channel] = []
         for ch in self.channels:
-            if ch in selected:
+            if any(ch is s for s in selected):
                 new_channels.append(ch.trimmed(t_start=t_start, t_end=t_end))
             else:
                 new_channels.append(ch)
@@ -1407,7 +1431,7 @@ class Test:
         # Apply same window to all selected channels
         new_channels: list[Channel] = []
         for ch in self.channels:
-            if ch in selected:
+            if any(ch is s for s in selected):
                 new_channels.append(ch.trimmed(t_start=t_start, t_end=t_end))
             else:
                 new_channels.append(ch)
@@ -1998,7 +2022,7 @@ class Test:
 
     def plot_channels(
         self,
-        selector: Any,
+        selector: Any = None,
         ncols: int = 3,
         plot_type: str = "timehistory",
         sharex: bool = True,
