@@ -291,7 +291,8 @@ class Test:
         if not self.channels:
             return 0.0
         # Determine duration of the first channel
-        dur0 = self.channels[0].time[-1] - self.channels[0].time[0]
+        t0, _ = self.channels[0].processed()
+        dur0 = t0[-1] - t0[0]
         # Check consistency with all other channels
         for i, ch in enumerate(self.channels[1:], start=1):
             dur_i = ch.time[-1] - ch.time[0]
@@ -1897,7 +1898,7 @@ class Test:
 
     def plot_grid(
         self,
-        layout: Any,
+        layout: Any | None = None,
         plot_type: str = "timehistory",
         sharex: bool = True,
         sharey: bool = True,
@@ -1910,7 +1911,7 @@ class Test:
 
         The layout argument describes how channels are arranged on the grid.
         Each cell in layout can be:
-        - None: leave the subplot empty;
+        - None: a single-row layout containing all channels by index;
         - a single ChannelKey / Channel: one channel on that axes;
         - a sequence (tuple or list) of ChannelKey / Channel: multiple channels
           overlaid on the same axes, with a legend.
@@ -1959,6 +1960,8 @@ class Test:
             If ``make_caption`` is True, a suggested figure caption is returned
             as a third element.
         """
+        if layout is None:
+            layout = [list(range(len(self.channels)))]
         normalized = self._normalize_layout(layout)
         n_rows = len(normalized)
         n_cols = len(normalized[0])
