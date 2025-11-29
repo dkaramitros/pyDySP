@@ -295,7 +295,8 @@ class Test:
         dur0 = t0[-1] - t0[0]
         # Check consistency with all other channels
         for i, ch in enumerate(self.channels[1:], start=1):
-            dur_i = ch.time[-1] - ch.time[0]
+            ti, _ = ch.processed()
+            dur_i = float(ti[-1] - ti[0])
             if not np.isclose(dur_i, dur0, rtol=1e-6, atol=1e-12):
                 raise ValueError(
                     f"Channels have inconsistent durations: channel 0 duration={dur0}, channel {i} duration={dur_i}"
@@ -1903,7 +1904,7 @@ class Test:
         sharex: bool = True,
         sharey: bool = True,
         title_suffix: str | None = None,
-        make_caption: bool = True,
+        make_caption: bool = False,
         **kwargs: Any,
     ):
         """
@@ -1911,55 +1912,15 @@ class Test:
 
         The layout argument describes how channels are arranged on the grid.
         Each cell in layout can be:
-        - None: a single-row layout containing all channels by index;
+        - None: leave the subplot empty;
         - a single ChannelKey / Channel: one channel on that axes;
         - a sequence (tuple or list) of ChannelKey / Channel: multiple channels
           overlaid on the same axes, with a legend.
 
-        Examples
-        --------
-        2x2 grid, one channel per subplot::
-            test.plot_grid([[1, 2], [3, 4]])
-
-        Ragged rows (padded with empty cell)::
-            test.plot_grid([[1, 2], [3]])
-
-        Multiple channels on one axes with legend::
-            test.plot_grid([(2, 3), (4, 5)])
-
-        Parameters
-        ----------
-        layout :
-            Layout specification as described above (nested lists/tuples of
-            ChannelKey or Channel, optionally with None cells).
-        plot_type : str, optional
-            Plot type: "timehistory" (time), "fourier", "psd", "arias",
-            "response", etc. This is mapped to the corresponding Channel
-            plotting method.
-        sharex : bool, optional
-            If True (default), subplots share the same x-axis.
-        sharey : bool, optional
-            If True (default), subplots share the same y-axis range.
-        title_suffix : str or None, optional
-            Optional suffix to append to the Test name for the figure title.
-            The title is ``self.name`` if None, or ``f"{self.name}: {title_suffix}"``.
-        make_caption : bool, optional
-            If True, the function also returns a suggested figure caption string
-            as a third return value.
-        **kwargs :
-            Additional keyword arguments forwarded to the underlying Channel
-            plotting method (e.g. processed=False, fmax=..., etc).
-
-        Returns
-        -------
-        fig : matplotlib.figure.Figure
-            The created Figure.
-        axes : numpy.ndarray
-            2D array of Axes objects with shape (n_rows, n_cols).
-        caption : str, optional
-            If ``make_caption`` is True, a suggested figure caption is returned
-            as a third element.
+        If ``layout`` is None, a single-row layout containing all channels
+        (by index order) is used.
         """
+        # Default layout: single row with all channels
         if layout is None:
             layout = [list(range(len(self.channels)))]
         normalized = self._normalize_layout(layout)
@@ -1987,7 +1948,8 @@ class Test:
                 for key in keys:
                     if isinstance(key, Channel):
                         ch = key
-                        if ch not in self.channels:
+                        # Use identity-based membership to avoid NumPy == issues
+                        if not any(ch is existing for existing in self.channels):
                             raise ValueError(
                                 "Channel in layout is not part of this Test."
                             )
@@ -2008,8 +1970,8 @@ class Test:
             self.name if title_suffix is None else f"{self.name}: {title_suffix}"
         )
         fig.suptitle(full_title)
-        caption = ""
         if make_caption:
+            # Build unique channel list preserving order
             uniq_channels: list[Channel] = []
             seen = set()
             for ch in all_channels:
