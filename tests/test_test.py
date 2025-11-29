@@ -1,3 +1,4 @@
+import csv
 import numpy as np
 import pytest
 import matplotlib.pyplot as plt
@@ -208,6 +209,33 @@ def test_transfer_function_shapes_and_kind_switch():
         test.transfer_function("In", "Out", kind="invalid")
 
 
+def test_plot_transfer_function_smoke(monkeypatch):
+    # Use non-interactive backend
+    plt.switch_backend("Agg")
+
+    dt = 0.01
+    n = 1024
+    ch_x = make_channel(n=n, dt=dt, freq=3.0, name_user="In")
+    t = np.arange(n) * dt
+    y = 0.5 * np.sin(2.0 * np.pi * 3.0 * t)
+    ch_y = Channel(data=y, dt=dt, name_user="Out")
+
+    test = Test.from_channels(name="HPlotTest", channels=[ch_x, ch_y])
+
+    # Magnitude-only plot
+    ax_mag = test.plot_transfer_function("In", "Out")
+    assert isinstance(ax_mag, plt.Axes)
+    assert len(ax_mag.lines) >= 1
+
+    # Magnitude + phase plot: expect a twinned second axis
+    ax_mag_phase = test.plot_transfer_function("In", "Out", phase=True)
+    fig = ax_mag_phase.figure
+    # One main axis + one twin axis
+    assert len(fig.axes) == 2
+
+    plt.close(fig)
+
+
 def test_time_delay_estimation_sign_and_magnitude():
     dt = 0.01
     n = 1024
@@ -325,3 +353,36 @@ def test_channel_health_basic():
         or "weak" in report.lower()
         or "response" in report.lower()
     )
+
+
+def test_channel_info_to_csv_removes_redundant(tmp_path):
+    ch1 = make_channel(n=20, dt=0.01, name_user="A", units="g")
+    ch2 = make_channel(n=20, dt=0.01, name_user="A", units="g")
+
+    test = Test.from_channels(name="T", channels=[ch1, ch2])
+
+    csv_path = tmp_path / "meta.csv"
+    test.channel_info_to_csv(str(csv_path))
+
+    with open(csv_path, newline="") as f:
+        reader = csv.reader(f)
+        header = next(reader)
+
+    # idx always present
+    assert header == ["idx"]
+
+
+def test_import_csv_raises_on_unmatched_row(tmp_path):
+    ch1 = make_channel(n=20, dt=0.01, name_user="Acc1")
+    test = Test.from_channels(name="X", channels=[ch1])
+
+    csv_path = tmp_path / "bad.csv"
+
+    # CSV row referencing unknown channel
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["name_user", "units"])
+        writer.writerow(["NonexistentChannel", "g"])  # <-- must trigger error
+
+    with pytest.raises(ValueError):
+        test.with_channel_info_from_csv(str(csv_path))

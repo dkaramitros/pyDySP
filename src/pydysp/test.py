@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import (
     Any,
     Dict,
@@ -901,6 +901,198 @@ class Test:
             writer.writerows(data_matrix)
 
     # ------------------------------------------------------------------ #
+    # CSV utilities
+    # ------------------------------------------------------------------ #
+
+    def channel_info_to_csv(
+        self,
+        filename: str,
+        overwrite: bool = True,
+    ) -> None:
+        """
+        Export channel metadata to CSV (one row per channel).
+
+        Columns are written only if they contain non-identical data
+        across channels. This avoids redundant storage.
+
+        Always included: idx
+        """
+        if os.path.exists(filename) and not overwrite:
+            raise FileExistsError(
+                f"File '{filename}' already exists and overwrite=False."
+            )
+        # Fields we consider for export
+        fields = [
+            "name_user",
+            "name_input",
+            "quantity",
+            "units",
+            "raw_units",
+            "label_axis",
+            "label_legend",
+            "description_long",
+            "calibration_factor",
+            "tags",
+        ]
+        # Detect redundant fields (all channels identical → drop)
+        fields_to_export = ["idx"]
+        for f in fields:
+            values = []
+            for ch in self.channels:
+                v = getattr(ch, f)
+                if f == "tags":
+                    v = tuple(sorted(v)) if v else ()
+                values.append(v)
+            if len(set(values)) > 1:  # at least one channel differs
+                fields_to_export.append(f)
+        with open(filename, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(fields_to_export)
+            for idx, ch in enumerate(self.channels):
+                row = []
+                for field in fields_to_export:
+                    if field == "idx":
+                        row.append(idx)
+                    elif field == "tags":
+                        row.append(",".join(sorted(ch.tags)) if ch.tags else "")
+                    else:
+                        value = getattr(ch, field)
+                        row.append("" if value is None else value)
+                writer.writerow(row)
+
+    def with_channel_info_from_csv(self, filename: str) -> "Test":
+        """
+        Return a new Test with channel metadata updated from CSV.
+
+        - Header matching is flexible: underscores/spaces/upper/lower-case ignored.
+        - Any row that cannot be matched → ValueError.
+        - Matching priority: idx column → name_user/name_input.
+
+        Only metadata is updated; data/processing unchanged.
+        """
+        if not os.path.exists(filename):
+            raise FileNotFoundError(filename)
+        # Load CSV
+        with open(filename, newline="") as f:
+            reader = csv.reader(f)
+            try:
+                header = next(reader)
+            except StopIteration:
+                raise ValueError("CSV file is empty.")
+            rows = list(reader)
+        if not header:
+            raise ValueError("CSV has no header.")
+
+        # Normaliser for column names
+        def norm(s: str) -> str:
+            return s.strip().lower().replace(" ", "_")
+
+        # Alias mapping (all lower-case and underscore-normalised)
+        alias_map = {
+            "idx": {"idx", "index", "#"},
+            "name_user": {"name_user", "user", "user_name", "name", "channel", "ch"},
+            "name_input": {"name_input", "input", "input_name", "raw_name", "daq"},
+            "quantity": {"quantity", "qty"},
+            "units": {"units", "unit"},
+            "raw_units": {"raw_units", "rawunit"},
+            "label_axis": {"label_axis", "axis_label", "ylabel", "y_label"},
+            "label_legend": {"label_legend", "legend_label", "legend"},
+            "description_long": {"description_long", "description", "desc"},
+            "calibration_factor": {
+                "calibration_factor",
+                "calibration",
+                "calib",
+                "gain",
+            },
+            "tags": {"tags", "tag"},
+        }
+        # Build column to attribute map
+        col_to_attr = {}
+        for i, name in enumerate(header):
+            key = norm(name)
+            for attr, aliases in alias_map.items():
+                if key in aliases:
+                    col_to_attr[i] = attr
+                    break
+        if not col_to_attr:
+            raise ValueError("No recognised columns in CSV header.")
+        # Pre-build name lookup (case-insensitive)
+        name_user_map = {
+            (ch.name_user or "").lower(): i
+            for i, ch in enumerate(self.channels)
+            if ch.name_user
+        }
+        name_input_map = {
+            (ch.name_input or "").lower(): i
+            for i, ch in enumerate(self.channels)
+            if ch.name_input
+        }
+        idx_col = next((i for i, a in col_to_attr.items() if a == "idx"), None)
+        new_channels = list(self.channels)
+        for row in rows:
+            if not any(row):
+                continue
+            ch_idx = None
+            # Attempt 1: match by idx column
+            if idx_col is not None and idx_col < len(row):
+                try:
+                    ix = int(row[idx_col])
+                    if 0 <= ix < len(self.channels):
+                        ch_idx = ix
+                except ValueError:
+                    pass
+            # Attempt 2: match by name
+            if ch_idx is None:
+                names = []
+                for col, attr in col_to_attr.items():
+                    if attr in ("name_user", "name_input") and col < len(row):
+                        v = row[col].strip()
+                        if v:
+                            names.append(v.lower())
+                for nm in names:
+                    if nm in name_user_map:
+                        ch_idx = name_user_map[nm]
+                        break
+                    if nm in name_input_map:
+                        ch_idx = name_input_map[nm]
+                        break
+            if ch_idx is None:
+                raise ValueError(f"Row could not match any channel: {row}")
+            ch = new_channels[ch_idx]
+            updates = {}
+            tags_val = None
+            for col, attr in col_to_attr.items():
+                if attr == "idx" or col >= len(row):
+                    continue
+                val = row[col].strip()
+                if not val:
+                    continue
+                if attr == "tags":
+                    tokens = [
+                        t.strip() for t in val.replace(";", ",").split(",") if t.strip()
+                    ]
+                    tags_val = set(tokens)
+                elif attr == "calibration_factor":
+                    try:
+                        updates[attr] = float(val)
+                    except ValueError:
+                        continue
+                else:
+                    updates[attr] = val
+            if tags_val is not None:
+                updates["tags"] = tags_val
+            new_channels[ch_idx] = replace(ch, **updates)
+        return type(self)(
+            name=self.name,
+            description=self.description,
+            source_file=self.source_file,
+            timestamp=self.timestamp,
+            channels=new_channels,
+            tags=set(self.tags),
+            meta=dict(self.meta),
+        )
+
+    # ------------------------------------------------------------------ #
     # Channel management
     # ------------------------------------------------------------------ #
 
@@ -1614,6 +1806,113 @@ class Test:
                 f"Unsupported transfer-function kind {kind!r}, use 'H1' or 'H2'."
             )
         return f, H
+
+    def plot_transfer_function(
+        self,
+        x: ChannelKey,
+        y: ChannelKey,
+        kind: Literal["H1", "H2"] = "H1",
+        processed: bool = True,
+        use_cache: bool = True,
+        phase: bool = False,
+        fmax: Optional[float] = None,
+        ax: Optional[plt.Axes] = None,
+        tf_kwargs: Optional[Mapping[str, Any]] = None,
+        label: Optional[str] = None,
+        **plot_kwargs: Any,
+    ) -> plt.Axes:
+        """
+        Plot the transfer function magnitude between two channels.
+
+        This is a convenience wrapper around :meth:`transfer_function`:
+
+        - Computes H1 or H2 transfer function between input ``x`` and output ``y``.
+        - Plots the linear magnitude ``|H(f)|`` versus frequency on a logarithmic x-axis.
+        - Optionally overlays the phase angle in degrees on a secondary y-axis.
+
+        Parameters
+        ----------
+        x :
+            Input (excitation) channel key (index, name or Channel instance).
+        y :
+            Output (response) channel key (index, name or Channel instance).
+        kind : {"H1", "H2"}, optional
+            Transfer function estimator (default "H1").
+        processed : bool, optional
+            If True (default), use processed data from each channel.
+        use_cache : bool, optional
+            If True (default), use the Channel-level processing cache.
+        phase : bool, optional
+            If True, also plot the phase angle (in degrees) on a secondary y-axis.
+        fmax : float or None, optional
+            Optional upper frequency limit in Hz for plotting.
+            If None, the full available frequency range is plotted.
+        ax : matplotlib.axes.Axes or None, optional
+            Axes to plot on. If None, a new figure and axes are created.
+        tf_kwargs : mapping or None, optional
+            Additional keyword arguments forwarded to :meth:`transfer_function`
+            and ultimately ``scipy.signal.csd``, e.g. ``nperseg``, ``window``,
+            ``noverlap``.
+        label : str or None, optional
+            Label for the magnitude curve (for legends). If None, a default label
+            based on the channel names is used.
+        **plot_kwargs :
+            Additional keyword arguments forwarded to ``ax.semilogx``
+            (e.g. linestyle, linewidth).
+
+        Returns
+        -------
+        ax : matplotlib.axes.Axes
+            The axes with the plotted transfer function magnitude.
+        """
+        if tf_kwargs is None:
+            tf_kwargs = {}
+
+        # Compute transfer function (will validate channels and sampling)
+        f, H = self.transfer_function(
+            x=x,
+            y=y,
+            kind=kind,
+            processed=processed,
+            use_cache=use_cache,
+            **tf_kwargs,
+        )
+
+        mag = np.abs(H)
+
+        # Apply frequency limit if requested
+        if fmax is not None:
+            mask = f <= fmax
+            f = f[mask]
+            mag = mag[mask]
+            H = H[mask]
+
+        if ax is None:
+            _, ax = plt.subplots()
+
+        # Build a sensible default label if none provided
+        if label is None:
+            ch_x = x if isinstance(x, Channel) else self[x]
+            ch_y = y if isinstance(y, Channel) else self[y]
+            name_x = ch_x.name_user or ch_x.name_input or "<x>"
+            name_y = ch_y.name_user or ch_y.name_input or "<y>"
+            label = f"{kind.upper()} {name_y}/{name_x}"
+
+        # Plot magnitude
+        ax.semilogx(f, mag, label=label, **plot_kwargs)
+        ax.set_xlabel("Frequency [Hz]")
+        ax.set_ylabel(r"Transfer function magnitude $|H(f)|$")
+        ax.grid(True, which="both", linestyle=":")
+
+        # Optionally add phase on secondary axis
+        if phase:
+            # Unwrap phase to avoid ±π jumps, then convert to degrees
+            phase_deg = np.unwrap(np.angle(H)) * 180.0 / np.pi
+            ax_phase = ax.twinx()
+            ax_phase.semilogx(f, phase_deg, linestyle="--")
+            ax_phase.set_ylabel("Phase [deg]")
+
+        return ax
 
     def time_delay(
         self,

@@ -828,6 +828,10 @@ class Channel:
     # Plotting
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # Plotting
+    # ------------------------------------------------------------------ #
+
     def plot(
         self,
         ax: Optional[plt.Axes] = None,
@@ -836,29 +840,120 @@ class Channel:
         include_label: bool = True,
         include_kind: bool = False,
         include_legend: bool = False,
+        plot_type: str = "timehistory",
         **plot_kwargs: Any,
     ) -> plt.Axes:
         """
-        Plot the time history of this channel.
+        Plot this channel in various representations.
+
+        The default behaviour (``plot_type='timehistory'``) is to plot the
+        time history. Other plot types delegate to the corresponding helper
+        methods (Fourier spectrum, PSD, Arias intensity, response spectrum).
+
+        Supported plot_type values
+        --------------------------
+        - "timehistory", "time", "time_history"
+        - "fourier", "fft"
+        - "psd", "welch", "power"
+        - "arias", "husid"
+        - "response", "response_spectrum", "rs"
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on. If ``None``, a new figure and axes are created.
+        processed : bool, optional
+            If True (default), use processed data for time-domain plotting and
+            for any spectral quantities that depend on the signal.
+        use_cache : bool, optional
+            If True (default), use the Channel-level processing cache.
+        include_label : bool, optional
+            For time-history plots, if True (default) use ``label_axis`` as
+            the y-axis label when available.
+        include_kind : bool, optional
+            For time-history plots, if True, build a generic y-label from
+            ``quantity`` and ``units`` (e.g. "Acceleration [g]").
+        include_legend : bool, optional
+            For time-history plots, if True, add a legend using
+            ``label_legend`` / ``name_user``.
+        plot_type : str, optional
+            Which representation to plot. See the list above. Defaults to
+            "timehistory".
+        **plot_kwargs
+            Additional keyword arguments forwarded to the underlying plotting
+            method (e.g. ``color``, ``fmax=...``, ``periods=...``, etc.).
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The axes with the plotted data.
+
+        Raises
+        ------
+        ValueError
+            If an unknown ``plot_type`` is given.
         """
         if ax is None:
             _, ax = plt.subplots()
-        t, y = self.xy(processed=processed, use_cache=use_cache)
-        line_label = self.label_legend or self.name_user or self.name_input
-        ax.plot(t, y, label=line_label, **plot_kwargs)
-        ax.set_xlabel("Time [s]")
-        ylabel = ax.get_ylabel() or ""
-        if include_label and self.label_axis:
-            ylabel = self.label_axis
-        if include_kind and self.quantity:
-            ylabel = self.quantity.capitalize() + (
-                f" [{self.units}]" if self.units else ""
+
+        pt = plot_type.lower()
+
+        # Time history (original behaviour)
+        if pt in ("time", "timehistory", "time_history"):
+            t, y = self.xy(processed=processed, use_cache=use_cache)
+            line_label = self.label_legend or self.name_user or self.name_input
+            ax.plot(t, y, label=line_label, **plot_kwargs)
+            ax.set_xlabel("Time [s]")
+
+            ylabel = ax.get_ylabel() or ""
+            if include_label and self.label_axis:
+                ylabel = self.label_axis
+            if include_kind and self.quantity:
+                ylabel = self.quantity.capitalize() + (
+                    f" [{self.units}]" if self.units else ""
+                )
+            ax.set_ylabel(ylabel)
+
+            if include_legend and line_label:
+                ax.legend()
+
+            ax.grid(True)
+            return ax
+
+        # Delegated spectral / intensity / response plots
+        if pt in ("fourier", "fft"):
+            return self.plot_fourier(
+                ax=ax,
+                processed=processed,
+                use_cache=use_cache,
+                **plot_kwargs,
             )
-        ax.set_ylabel(ylabel)
-        if include_legend and line_label:
-            ax.legend()
-        ax.grid(True)
-        return ax
+        if pt in ("psd", "welch", "power"):
+            return self.plot_psd(
+                ax=ax,
+                processed=processed,
+                use_cache=use_cache,
+                **plot_kwargs,
+            )
+        if pt in ("arias", "husid"):
+            return self.plot_arias(
+                ax=ax,
+                processed=processed,
+                use_cache=use_cache,
+                **plot_kwargs,
+            )
+        if pt in ("response", "response_spectrum", "rs"):
+            return self.plot_response_spectrum(
+                ax=ax,
+                processed=processed,
+                use_cache=use_cache,
+                **plot_kwargs,
+            )
+
+        raise ValueError(
+            f"Unknown plot_type {plot_type!r}. "
+            "Use 'timehistory', 'fourier', 'psd', 'arias', or 'response'."
+        )
 
     def plot_fourier(
         self,

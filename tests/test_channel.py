@@ -266,3 +266,46 @@ def test_channel_spectral_plots_smoke():
     plt.close(fig2)
     plt.close(fig3)
     plt.close(fig4)
+
+
+def test_channel_plot_type_dispatch_smoke():
+    """Channel.plot should delegate correctly for supported plot_type values."""
+    ch = make_sine_channel()
+
+    # time history
+    fig1, ax1 = plt.subplots()
+    ch.plot(ax=ax1, plot_type="timehistory", include_label=True, include_legend=True)
+    plt.close(fig1)
+
+    # Fourier spectrum
+    fig2, ax2 = plt.subplots()
+    ch.plot(ax=ax2, plot_type="fourier", fmax=20.0)
+    plt.close(fig2)
+
+    # PSD / Welch
+    fig3, ax3 = plt.subplots()
+    ch.plot(ax=ax3, plot_type="psd", fmax=20.0)
+    plt.close(fig3)
+
+    # Arias intensity
+    fig4, ax4 = plt.subplots()
+    ch.plot(ax=ax4, plot_type="arias", g=9.81, show_window=True)
+    plt.close(fig4)
+
+    # Response spectrum
+    fig5, ax5 = plt.subplots()
+    ch.plot(
+        ax=ax5,
+        plot_type="response",
+        periods=np.array([0.5, 1.0, 2.0]),
+    )
+    plt.close(fig5)
+
+
+def test_channel_plot_type_invalid_raises():
+    """Channel.plot should raise for an unsupported plot_type."""
+    ch = make_sine_channel()
+    fig, ax = plt.subplots()
+    with pytest.raises(ValueError, match="Unknown plot_type"):
+        ch.plot(ax=ax, plot_type="not_a_plot_type")
+    plt.close(fig)
