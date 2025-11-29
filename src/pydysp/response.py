@@ -166,17 +166,25 @@ def sdof_newmark_response(
     n = len(acc)
     if n == 0:
         return 0.0, 0.0, 0.0
+
+    # SDOF properties for unit mass
     m = 1.0
     k = m * omega**2
     c = 2.0 * ksi * omega * m
-    # Newmark average acceleration parameters
+
+    # Newmark average-acceleration parameters (γ, β)
     gamma = 0.5
     beta = 0.25
+
+    # State vectors for relative displacement, velocity, and acceleration
     u = np.zeros(n)
     v = np.zeros(n)
     a_rel = np.zeros(n)
-    # Initial relative acceleration from equilibrium
+
+    # Initial relative acceleration from equilibrium at t = 0
     a_rel[0] = (-acc[0] - c * v[0] - k * u[0]) / m
+
+    # Precompute Newmark effective-stiffness coefficients
     a0 = 1.0 / (beta * dt**2)
     a1 = gamma / (beta * dt)
     a2 = 1.0 / (beta * dt)
@@ -184,7 +192,11 @@ def sdof_newmark_response(
     a4 = gamma / beta - 1.0
     a5 = dt * (gamma / (2.0 * beta) - 1.0)
     k_eff = k + a0 * m + a1 * c
+
+    # Effective load due to base acceleration
     p = -m * acc
+
+    # Time-stepping loop (Newmark average-acceleration scheme)
     for i in range(n - 1):
         dp = (
             p[i + 1]
@@ -196,6 +208,7 @@ def sdof_newmark_response(
         u[i + 1] = u[i] + du
         a_rel[i + 1] = a0 * (u[i + 1] - u[i]) - a2 * v[i] - a3 * a_rel[i]
         v[i + 1] = v[i] + dt * ((1.0 - gamma) * a_rel[i] + gamma * a_rel[i + 1])
+
     Sd = float(np.max(np.abs(u)))
     Sv = float(np.max(np.abs(v)))
     a_abs = a_rel + acc

@@ -216,7 +216,7 @@ class Test:
             if selector in self.channels:
                 base = [selector]
             else:
-                raise ValueError("Channel is not part of this Test")
+                raise ValueError("Channel is not part of this Test.")
         elif isinstance(selector, (int, str)):
             base = [self[selector]]
         elif isinstance(selector, slice):
@@ -226,7 +226,9 @@ class Test:
             for key in selector:
                 if isinstance(key, Channel):
                     if key not in self.channels:
-                        raise ValueError("Channel in selector is not part of this Test")
+                        raise ValueError(
+                            "Channel in selector is not part of this Test."
+                        )
                     tmp.append(key)
                 else:
                     tmp.append(self[key])
@@ -1652,7 +1654,7 @@ class Test:
         else:
             if isinstance(ref, Channel):
                 if ref not in self.channels:
-                    raise ValueError("Reference Channel is not part of this Test.")
+                    raise ValueError("Reference channel is not part of this Test.")
                 ref_ch = ref
             else:
                 ref_ch = self[ref]  # int or str via __getitem__
@@ -1738,8 +1740,8 @@ class Test:
             Time buffer (in seconds) to extend the window before the
             detected start time.
         buffer_after : float, optional
-            Time buffer (in seconds) to extend the window after the detected
-            end time.
+            Time buffer (in seconds) to extend the window after the
+            detected end time.
         processed : bool, optional
             Whether to use processed data for the reference channel when
             computing the window.
@@ -1771,7 +1773,7 @@ class Test:
         else:
             if isinstance(ref, Channel):
                 if ref not in self.channels:
-                    raise ValueError("Reference Channel is not part of this Test.")
+                    raise ValueError("Reference channel is not part of this Test.")
                 ref_ch = ref
             else:
                 ref_ch = self[ref]
@@ -1830,7 +1832,7 @@ class Test:
         * Choose a reference channel (as in
           :meth:`trimmed_by_threshold`).
         * On the reference channel, compute the Arias-based window via
-          :meth:`Channel.trim_by_arias`.
+            :meth:`Channel.trim_by_arias`.
         * Extract ``t_start`` and ``t_end`` from the reference channel's
           ``trim_params``.
         * Apply :meth:`Channel.trimmed` with this window to all selected
@@ -1891,7 +1893,7 @@ class Test:
         else:
             if isinstance(ref, Channel):
                 if ref not in self.channels:
-                    raise ValueError("Reference Channel is not part of this Test.")
+                    raise ValueError("Reference channel is not part of this Test.")
                 ref_ch = ref
             else:
                 ref_ch = self[ref]
@@ -1975,13 +1977,13 @@ class Test:
         """
         if isinstance(x, Channel):
             if not any(x is s for s in self.channels):
-                raise ValueError("Input Channel is not part of this Test.")
+                raise ValueError("Input channel is not part of this Test.")
             ch_x = x
         else:
             ch_x = self[x]
         if isinstance(y, Channel):
             if not any(y is s for s in self.channels):
-                raise ValueError("Output Channel is not part of this Test.")
+                raise ValueError("Output channel is not part of this Test.")
             ch_y = y
         else:
             ch_y = self[y]
@@ -2066,13 +2068,13 @@ class Test:
         """
         if isinstance(x, Channel):
             if not any(x is s for s in self.channels):
-                raise ValueError("Input Channel is not part of this Test.")
+                raise ValueError("Input channel is not part of this Test.")
             ch_x = x
         else:
             ch_x = self[x]
         if isinstance(y, Channel):
             if not any(y is s for s in self.channels):
-                raise ValueError("Output Channel is not part of this Test.")
+                raise ValueError("Output channel is not part of this Test.")
             ch_y = y
         else:
             ch_y = self[y]
@@ -2264,13 +2266,13 @@ class Test:
         """
         if isinstance(x, Channel):
             if not any(x is s for s in self.channels):
-                raise ValueError("Input Channel is not part of this Test.")
+                raise ValueError("Input channel is not part of this Test.")
             ch_x = x
         else:
             ch_x = self[x]
         if isinstance(y, Channel):
             if not any(y is s for s in self.channels):
-                raise ValueError("Output Channel is not part of this Test.")
+                raise ValueError("Output channel is not part of this Test.")
             ch_y = y
         else:
             ch_y = self[y]
@@ -2566,8 +2568,8 @@ class Test:
             )
         else:
             raise ValueError(
-                f"Unknown plot_type {plot_type!r}. "
-                "Use 'timehistory', 'fourier', 'psd', 'arias', 'response', etc."
+                f"Unsupported plot_type {plot_type!r}. "
+                "Expected 'timehistory', 'fourier', 'psd', 'arias', or 'response'."
             )
 
     def plot_grid(
@@ -2839,7 +2841,9 @@ class Test:
             try:
                 t, y = ch.xy(processed=processed, use_cache=use_cache)
             except Exception as err:
-                rows.append([idx, name] + ["-"] * 8 + [f"error: {err}"])
+                rows.append(
+                    [idx, name] + ["-"] * (len(headers) - 3) + [f"error: {err}"]
+                )
                 continue
             if y.size == 0:
                 rows.append([idx, name, 0, 0, "-", "-", "-", "-", "-", "-", "empty"])

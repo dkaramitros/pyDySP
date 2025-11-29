@@ -88,48 +88,32 @@ class Channel:
     FILTER_DEFAULTS = {"btype": "lowpass", "fc": 50.0, "order": 2}
     BASELINE_DEFAULTS = {"type": "linear"}
 
-    # 1D numeric signal values (raw data)
+    # Time-history data and time axis
     data: np.ndarray
-    # Sampling interval in seconds (used if explicit `time` is not provided)
     dt: Optional[float] = None
-    # Start time in seconds (used when constructing `time` from `dt`)
     t0: float = 0.0
-    # Explicit time array (same length/shape as `data`, if provided)
     time: Optional[np.ndarray] = None
 
-    # Original name as found in the input file
+    # Naming, labels and physical metadata
     name_input: Optional[str] = None
-    # Your preferred short name, e.g. "Acc1"
     name_user: Optional[str] = None
-    # Axis label for plotting, e.g. "Acc1: Footing (g)"
     label_axis: Optional[str] = None
-    # Legend label for plotting, e.g. "Acc1: Footing"
     label_legend: Optional[str] = None
-    # Longer human-readable description of the channel, e.g. "Acceleration at footing level"
     description_long: Optional[str] = None
-    # Physical quantity type, e.g. "displacement", "force", "acceleration"
     quantity: Optional[str] = None
-    # Engineering units, e.g. "m", "kN", "g"
     units: Optional[str] = None
-    # Raw DAQ units, e.g. "V"
     raw_units: Optional[str] = None
-    # Multiplicative factor to convert raw data to physical units (e.g. g/V)
     calibration_factor: float = 1.0
 
-    # Drift correction parameters: { "points": 50 }
+    # Processing configuration and notes
     drift_params: Dict[str, Any] = field(default_factory=dict)
-    # Filtering parameters, e.g. { "btype": "lowpass", "fc": 50.0, "order": 2 }
     filter_params: Dict[str, Any] = field(default_factory=dict)
-    # Baseline correction parameters, e.g. { "type": "linear" }
     baseline_params: Dict[str, Any] = field(default_factory=dict)
-    # Trimming parameters: {"t_start":, "t_end":} in seconds
     trim_params: Dict[str, Any] = field(default_factory=dict)
-    # Free-form notes about processing steps (trimming, filtering, calibration, etc.)
     processing_notes: list[str] = field(default_factory=list)
 
-    # Tags used for grouping
+    # Grouping and free-form metadata
     tags: set[str] = field(default_factory=set)
-    # Free-form metadata, e.g. sensor type
     meta: Dict[str, Any] = field(default_factory=dict)
 
     # Internal cache for processed data (not part of the public API)
@@ -532,8 +516,11 @@ class Channel:
             mask = y >= threshold
         if not np.any(mask):
             raise ValueError(f"No samples exceed the specified threshold ({threshold})")
+
+        # Indices of first and last samples above the threshold
         i_start = int(np.argmax(mask))
         i_end = int(len(mask) - 1 - np.argmax(mask[::-1]))
+
         t_start = float(t[i_start]) - buffer_before
         t_end = float(t[i_end]) + buffer_after
         # Clamp to original time range
@@ -688,9 +675,11 @@ class Channel:
         Ia_final = float(Ia[-1])
         if Ia_final <= 0.0:
             raise ValueError(f"Final Arias intensity is non-positive ({Ia_final})")
-        # Find indices where cumulative Arias crosses the requested fractions
+
+        # Indices where cumulative Arias intensity crosses the requested fractions
         idx_lower = int(np.argmax(Ia >= lower * Ia_final))
         idx_upper = int(np.argmax(Ia >= upper * Ia_final))
+
         t_lower = float(t[idx_lower]) - buffer_before
         t_upper = float(t[idx_upper]) + buffer_after
         # Clamp to original time range
@@ -738,6 +727,7 @@ class Channel:
             filter cutoff, trimming window outside the time range, or missing
             ``dt`` for filtering or response-related calculations).
         """
+        # Signature summarising the current processing configuration for caching
         signature = (
             tuple(sorted(self.drift_params.items())),
             tuple(sorted(self.filter_params.items())),
@@ -752,9 +742,11 @@ class Channel:
             and self._cache_processed_time is not None
         ):
             return self._cache_processed_time, self._cache_processed_data
-        # Start from raw
+
+        # Start from raw data
         t = self.time
         y = self.data.astype(float, copy=False)
+
         # 1. Drift correction
         if self.drift_params:
             params = {**self.DRIFT_DEFAULTS, **self.drift_params}
@@ -765,6 +757,7 @@ class Channel:
                 )
             drift_value = float(np.mean(y[:points]))
             y = y - drift_value
+
         # 2. Filtering
         if self.filter_params:
             if self.dt is None or self.dt <= 0:
@@ -800,10 +793,12 @@ class Channel:
                     )
             b, a = butter(order, Wn, btype=btype)
             y = filtfilt(b, a, y)
+
         # 3. Baseline correction
         if self.baseline_params:
             params = {**self.BASELINE_DEFAULTS, **self.baseline_params}
             y = detrend(y, **params)
+
         # 4. Trimming
         if self.trim_params:
             defaults = {"t_start": float(t[0]), "t_end": float(t[-1])}
@@ -821,9 +816,11 @@ class Channel:
                 )
             t = t[mask]
             y = y[mask]
+
         # 5. Calibration
         if self.calibration_factor != 1.0:
             y = y * self.calibration_factor
+
         # Cache result
         if use_cache:
             self._cache_signature = signature
@@ -1275,6 +1272,8 @@ class Channel:
             raise ValueError("periods must be a 1D array")
         if np.any(periods <= 0.0):
             raise ValueError("All periods must be positive")
+
+        # Preallocate spectral arrays and loop over SDOF periods
         Sd = np.zeros_like(periods, dtype=float)
         Sv = np.zeros_like(periods, dtype=float)
         Sa = np.zeros_like(periods, dtype=float)

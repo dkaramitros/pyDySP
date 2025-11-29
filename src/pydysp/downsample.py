@@ -49,14 +49,14 @@ def downsample(file_in: str, file_out: str, factor: int = 20) -> None:
             f"Input file not found or unreadable: {file_in}"
         ) from exc
 
-    # Downsample only numeric/array-like objects (ndim >= 1). Skip lists/tuples.
+    # Downsample only numeric/array-like objects (ndim >= 1); leave Python containers unchanged.
     for key, val in imported_data.items():
         if isinstance(val, (list, tuple)):
             continue
         if hasattr(val, "shape") and getattr(val, "ndim", 0) >= 1:
             imported_data[key] = val[::factor]
 
-    # Silence SciPy's warnings about __header__/__version__/__globals__
+    # Suppress SciPy warnings about field names starting with an underscore during saving.
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
