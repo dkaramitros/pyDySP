@@ -30,18 +30,13 @@ ChannelSelector = Union[ChannelKey, Sequence[ChannelKey], slice, None]
 @dataclass
 class Test:
     """
-    Represents a single experiment containing multiple time-history channels.
+    Experiment container for multiple time-history channels.
 
-    Features
-    --------
-    - Store experiment-level metadata (name, description, source file, timestamp).
-    - Manage a collection of `Channel` objects (selection, grouping, renaming).
-    - Provide experiment-level processing:
-        * Batch processing: drift correction, filtering, baseline correction, trimming.
-        * Pairwise analysis: transfer functions, time delays, cross-spectra.
-        * Basic modal identification (e.g. via FRFs / stabilization diagrams).
-    - Provide multi-channel plotting utilities for quick visual inspection.
-    - Provide convenient I/O constructors and exporters for common lab formats.
+    Holds metadata and an ordered list of Channel objects and provides:
+    - selection helpers and tags,
+    - batch processing (drift, filter, baseline, trim),
+    - pairwise analyses (cross-spectrum, transfer function, time delay),
+    - basic EMA model construction, plotting and common I/O (MAT/CSV).
     """
 
     # Name of the experiment (e.g. 'Shaking table Test 07').

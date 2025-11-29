@@ -9,18 +9,18 @@ import matplotlib.pyplot as plt
 @dataclass
 class ResponseSpectrum:
     """
-    Elastic response spectrum for an SDOF oscillator family.
+    Elastic response spectrum for a family of SDOF oscillators.
 
     Attributes
     ----------
     T : np.ndarray
         Natural periods (s).
     Sd : np.ndarray
-        Displacement spectrum for each period [m].
+        Spectral displacement [m].
     Sv : np.ndarray
-        Velocity spectrum for each period [m/s].
+        Spectral velocity [m/s].
     Sa : np.ndarray
-        Pseudo-acceleration spectrum for each period [g].
+        Pseudo-acceleration [g].
     ksi : float
         Damping ratio used for the spectrum.
     """
@@ -108,27 +108,27 @@ def sdof_newmark_response(
     ksi: float,
 ) -> tuple[float, float, float]:
     """
-    Newmark-beta (average acceleration) SDOF response to base acceleration.
+    Newmark-beta (average-acceleration) SDOF response to base acceleration.
 
-    Parameters
+    Inputs
     ----------
     acc : np.ndarray
-        Ground acceleration time history a_g(t) (m/s^2).
+        Ground acceleration time history a_g(t) in m/s^2
     dt : float
-        Time step (s).
+        Time step in s
     omega : float
-        Circular frequency of the oscillator (rad/s).
+        Circular frequency (rad/s)
     ksi : float
-        Damping ratio.
+        Damping ratio
 
     Returns
     -------
     Sd : float
-        Peak relative displacement [m].
+        Peak relative displacement [m]
     Sv : float
-        Peak relative velocity [m/s].
+        Peak relative velocity [m/s]
     Sa : float
-        Peak absolute acceleration [m/s^2].
+        Peak absolute acceleration [m/s^2]
     """
     n = len(acc)
     if n == 0:

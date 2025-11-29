@@ -15,13 +15,13 @@ from .response import ResponseSpectrum, sdof_newmark_response
 @dataclass
 class Channel:
     """
-    Represents a single experimental time-history channel.
+    Single time-history channel with metadata and processing parameters.
 
-    Features
-    --------
-    - Stores a 1D signal (`data`) and its time axis (`time`, or `dt` and `t0`).
-    - Keeps naming information for plotting and reports, as well as flexible tags and free-form metadata.
-    - Maintains processing parameters (e.g. for trimming and filtering) without modifying the raw data.
+    Stores raw 1D data and time information and provides non-destructive
+    processing (drift, filter, baseline, trim), spectra, Arias intensity,
+    response spectra and plotting utilities. Processing methods return
+    new Channel instances; processed() returns (time, data) with current
+    parameters applied.
     """
 
     # Default processing parameters
@@ -433,13 +433,16 @@ class Channel:
 
     def processed(self, use_cache: bool = True) -> tuple[np.ndarray, np.ndarray]:
         """
-        Return (time, data) with processing applied in the following order:
+        Return (time, data) after applying current processing steps.
 
-        1. Drift correction via drift_params
-        2. Butterworth filter via filter_params
-        3. Baseline correction via baseline_params
-        4. Trimming via trim_params
-        5. Calibration via calibration_factor
+        Processing order:
+        1) drift correction
+        2) Butterworth filter
+        3) baseline detrend
+        4) trimming (t_start, t_end)
+        5) calibration_factor scaling
+
+        Returns: (time, data) numpy arrays.
         """
         signature = (
             tuple(sorted(self.drift_params.items())),
@@ -682,9 +685,10 @@ class Channel:
         use_cache: bool = True,
     ) -> AriasResult:
         """
-        Compute the Arias intensity time history and significant duration.
+        Compute cumulative Arias intensity and significant-duration window.
 
-        Data is assumed to be acceleration in g.
+        Assumes channel contains acceleration in g. Returns AriasResult with
+        Ia(t) and t_start/t_end for the 5%/95% points by default.
         """
         t, y = self.xy(processed=processed, use_cache=use_cache)
         if y.size == 0:
@@ -719,10 +723,14 @@ class Channel:
         use_cache: bool = True,
     ) -> ResponseSpectrum:
         """
-        Compute the elastic response spectrum for a family of SDOF oscillators
-        subjected to this channel as base acceleration.
+        Compute elastic response spectrum for a grid of periods.
 
-        Data is assumed to be acceleration in g.
+        Inputs:
+        - periods: 1D array of natural periods [s]
+        - g: gravity to convert from g -> m/s^2
+        - ksi: damping ratio
+
+        Returns a ResponseSpectrum (Sa returned in g).
         """
         _, a = self.xy(processed=processed, use_cache=use_cache)
         if a.size == 0:

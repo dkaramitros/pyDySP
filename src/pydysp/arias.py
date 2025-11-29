@@ -9,18 +9,18 @@ import matplotlib.pyplot as plt
 @dataclass
 class AriasResult:
     """
-    Arias intensity result.
+    Arias intensity result and significant-duration window.
 
     Attributes
     ----------
     t : np.ndarray
         Time array.
     Ia : np.ndarray
-        Arias intensity time history.
+        Cumulative Arias intensity.
     t_start: float
-        Time corresponding to the 5% point.
+        Time corresponding to the chosen lower fraction (e.g. 5%).
     t_end: float
-        Time corresponding to the 95% point.
+        Time corresponding to the chosen upper fraction (e.g. 95%).
     """
 
     t: np.ndarray

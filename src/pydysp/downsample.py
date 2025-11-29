@@ -2,7 +2,7 @@ import scipy as sp
 
 
 def downsample(file_in: str, file_out: str, factor: int = 20):
-    """Downsample all array-like variables in a MATLAB .mat file.
+    """Downsample array-like variables stored in a MATLAB .mat file.
     Parameters
     ----------
     file_in : str
