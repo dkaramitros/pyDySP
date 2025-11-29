@@ -21,8 +21,6 @@ It provides:
 - Clean, readable code designed for notebooks, research reports, and reproducible workflows.
 - Full internal documentation (docstrings) and a growing library of example notebooks.
 
----
-
 ## Table of Contents
 
 - [pyDySP — Dynamic Signal Processing for Experimental Data](#pydysp--dynamic-signal-processing-for-experimental-data)
@@ -50,8 +48,6 @@ It provides:
   - [Documentation](#documentation)
   - [Contributing](#contributing)
   - [License](#license)
-
----
 
 ## Installation
 
@@ -84,8 +80,6 @@ sys.path.append("/path/to/parent/of/pydysp")
 from pydysp import Channel, Test
 ```
 
----
-
 ## Environment Setup
 
 ### Virtual environment (`venv`)
@@ -105,8 +99,6 @@ mamba activate pydysp
 pip install pydysp
 ```
 
----
-
 ## Dependencies
 
 - numpy  
@@ -119,8 +111,6 @@ Optional (for modal analysis):
 ```bash
 pip install sdypy-EMA
 ```
-
----
 
 ## Quick Start
 
@@ -185,8 +175,6 @@ model.select_poles()
 model.print_modal_data()
 ```
 
----
-
 ## Features
 
 ### Channel
@@ -208,8 +196,6 @@ model.print_modal_data()
 - Grid plots & channel lists  
 - Health diagnostics  
 
----
-
 ## Example Notebooks
 
 Available in:
@@ -218,13 +204,9 @@ Available in:
 examples/
 ```
 
----
-
 ## Documentation
 
 https://pydysp.readthedocs.io/en/latest/
-
----
 
 ## Contributing
 
@@ -233,8 +215,6 @@ pip install -e .
 pip install pytest
 pytest -q
 ```
-
----
 
 ## License
 
