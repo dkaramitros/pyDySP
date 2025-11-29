@@ -1,22 +1,31 @@
-.. pyDySP documentation master file, created by
-   sphinx-quickstart on Tue Jun 25 13:24:21 2024.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+pyDySP: Dynamic Signal Processing in Python
+===========================================
 
-Welcome to pyDySP's documentation!
-==================================
+pyDySP is a lightweight Python package for **dynamic signal processing of 
+experimental data**, designed around two core classes:
 
-A python package for Dynamic Signal Processing
+- ``Channel`` – a single time-history with metadata and lazy processing
+- ``Test`` – a collection of Channels with batch tools, spectra, TFs, plots
+
+It is built for laboratory and field measurements (shaking-table tests, 
+soil–structure interaction experiments, structural dynamics, etc.) but is 
+general enough for any time-series workflows.
+
+Features
+--------
+
+- Drift / filtering / baseline / trimming (non-destructive, lazy)
+- Fourier / Welch spectra with peak detection
+- Arias intensity & significant duration windows
+- Elastic response spectra (Newmark beta method)
+- Cross-spectra, coherence, transfer functions
+- Batch processing on multi-channel tests
+- Publication-ready plots
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Documentation:
 
+   installation
+   quickstart
    pydysp
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
