@@ -2070,53 +2070,49 @@ class Test:
             "status",
         ]
         rows = []
-
         channels = list(self.iter_channels(selector=selector))
         if not channels:
             return "No channels selected for health check."
-
         for ch in channels:
-            idx = self.channels.index(ch)
+            # Find index by identity, not by equality (avoids NumPy == issues)
+            idx = None
+            for i, existing in enumerate(self.channels):
+                if ch is existing:
+                    idx = i
+                    break
+            if idx is None:
+                raise ValueError("Channel in selector is not part of this Test.")
             name = ch.name_user or ch.name_input or f"ch{idx}"
-
             try:
                 t, y = ch.xy(processed=processed, use_cache=use_cache)
             except Exception as err:
                 rows.append([idx, name] + ["-"] * 8 + [f"error: {err}"])
                 continue
-
             if y.size == 0:
                 rows.append([idx, name, 0, 0, "-", "-", "-", "-", "-", "-", "empty"])
                 continue
-
             peak = float(np.max(np.abs(y)))
             rms = float(np.sqrt(np.mean(y**2))) if y.size else 0.0
             crest = peak / rms if rms > 0 else float("nan")
-
             t_start = t_end = dur = rms_pre = snr_pre = float("nan")
-
             if peak <= 0.0:
                 status = "dead"
             else:
                 thr = fraction_for_event * peak
                 mask = np.abs(y) >= thr
-
                 if not np.any(mask):
                     status = "no event"
                 else:
                     i_start = int(np.argmax(mask))
                     i_end = int(len(mask) - 1 - np.argmax(mask[::-1]))
-
                     t_start = float(t[i_start])
                     t_end = float(t[i_end])
                     dur = t_end - t_start
-
                     if i_start > 0:
                         y_pre = y[:i_start]
                         rms_pre = float(np.sqrt(np.mean(y_pre**2)))
                     else:
                         rms_pre = float("nan")
-
                     y_evt = y[i_start : i_end + 1]
                     rms_evt = float(np.sqrt(np.mean(y_evt**2)))
                     snr_pre = (
@@ -2124,18 +2120,15 @@ class Test:
                         if (rms_pre > 0 and np.isfinite(rms_pre))
                         else float("nan")
                     )
-
                     ok_peak = (min_peak is None) or (peak >= min_peak)
                     ok_snr = np.isfinite(snr_pre) and (snr_pre >= min_snr)
                     ok_crest = np.isfinite(crest) and (crest >= min_crest)
-
                     if ok_peak and ok_snr and ok_crest:
                         status = "ok"
                     elif ok_peak and (ok_snr or ok_crest):
                         status = "weak response"
                     else:
                         status = "noise"
-
             rows.append(
                 [
                     idx,
@@ -2151,7 +2144,6 @@ class Test:
                     status,
                 ]
             )
-
         return tabulate(
             rows,
             headers=headers,

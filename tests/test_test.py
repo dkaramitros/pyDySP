@@ -274,3 +274,54 @@ def test_plot_channels_and_grid_smoke(monkeypatch):
 
     plt.close(fig1)
     plt.close(fig2)
+
+
+import numpy as np
+from pydysp.channel import Channel
+from pydysp.test import Test
+
+
+def make_ch(data, dt=0.01, name="Ch"):
+    return Channel(
+        data=np.asarray(data),
+        dt=dt,
+        name_user=name,
+        quantity="acceleration",
+        units="g",
+    )
+
+
+def test_channel_health_basic():
+    # Dead channel (all zeros)
+    dead = make_ch(np.zeros(1000), name="Dead")
+
+    # Noise channel: small random values (no burst)
+    rng = np.random.default_rng(0)
+    noise = make_ch(0.001 * rng.standard_normal(2000), name="Noise")
+
+    # Good channel: clear event from t=2–4
+    dt = 0.01
+    t = np.arange(2000) * dt
+    y = 0.001 * rng.standard_normal(2000)
+    mask = (t >= 2.0) & (t <= 4.0)
+    y[mask] += np.sin(2 * np.pi * 5 * t[mask])
+    good = make_ch(y, name="Good")
+
+    test = Test.from_channels(name="HealthTest", channels=[dead, noise, good])
+
+    report = test.channel_health()
+
+    # Basic checks
+    assert isinstance(report, str)
+    assert "Dead" in report
+    assert "Noise" in report
+    assert "Good" in report
+
+    # Status keywords
+    assert "dead" in report.lower()
+    assert "no event" in report.lower() or "noise" in report.lower()
+    assert (
+        "ok" in report.lower()
+        or "weak" in report.lower()
+        or "response" in report.lower()
+    )
