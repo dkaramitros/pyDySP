@@ -1672,208 +1672,102 @@ class Test:
         self,
         input: ChannelKey,
         outputs: ChannelSelector,
-        lower: float,
-        upper: float,
-        pol_order_high: int = 60,
-        driving_point: int | None = None,
-        frf_type: str = "accelerance",
         kind: str = "H1",
         processed: bool = True,
         use_cache: bool = True,
-        **kwargs: Any,
+        **model_kwargs: Any,
     ):
         """
-        Build an sdypy-EMA Model for LSCF-based experimental modal analysis.
+        Build and return an sdypy.EMA.Model for experimental modal analysis.
 
-        This method computes FRFs between one input channel and multiple output channels using pyDySP,
-        then constructs and returns an ``sdypy.EMA.Model`` instance.
+        This method computes FRFs between one input channel and multiple output channels,
+        then constructs and returns an ``sdypy.EMA.Model`` instance using ``**model_kwargs``.
 
-        The returned object provides pole estimation, stabilization charts, modal parameter extraction and FRF reconstruction.
+        The returned object provides pole estimation, stabilization charts,
+        modal parameter extraction and FRF reconstruction.
 
         Parameters
         ----------
         input :
-            Input (excitation) channel key (index, name or Channel instance).
+            Input (excitation) channel.
         outputs :
-            Selector for output (response) channels (index, name, list, slice, etc.).
-        lower : float
-            Lower frequency limit in Hz for pole estimation (``lower`` in ``EMA.Model``).
-        upper : float
-            Upper frequency limit in Hz for pole estimation (``upper`` in ``EMA.Model``).
-        pol_order_high : int, optional
-            Highest polynomial order for LSCF (``pol_order_high`` in ``EMA.Model``, default 60).
-        driving_point : int or None, optional
-            Index of the driving FRF location in the FRF matrix (row index). If None (default), no driving point is used and modal shapes are not scaled.
-        frf_type : {"accelerance","mobility","receptance"}, optional
-            Type of FRF passed to ``EMA.Model`` (default "accelerance").
+            Output (response) channels.
         kind : {"H1","H2"}, optional
-            Transfer-function estimator for FRFs (default "H1", see ``Test.transfer_function``).
+            Transfer function estimator (default "H1").
         processed : bool, optional
-            If True (default), use processed data from each channel for FRF estimation.
+            Use processed channel data (default True).
         use_cache : bool, optional
-            If True (default), use the Channel-level processing cache.
-        **kwargs :
-            Additional keyword arguments forwarded to ``Test.transfer_function`` and ultimately to ``scipy.signal.csd`` (e.g. ``nperseg``, ``window``, ``noverlap``). If ``nperseg`` is not supplied, the MATLAB-like default used in pyDySP is applied.
+            Use Channel-level cache (default True).
+        **model_kwargs :
+            All additional keyword arguments are passed directly to
+            ``sdypy.EMA.Model``. Typical options include:
+                - ``lower``: lower frequency for pole estimation
+                - ``upper``: upper frequency for pole estimation
+                - ``pol_order_high``: highest model order for LSCF
+                - ``driving_point``: index of driving FRF
+                - ``frf_type``: "accelerance", "mobility", "receptance", ...
+
         Returns
         -------
-        model :
-            Instance of ``sdypy.EMA.Model`` constructed from the computed FRF matrix and frequency vector.
-        Raises
-        ------
-        ImportError
-            If the optional dependency ``sdypy`` (and its EMA module) is not installed.
-        ValueError
-            If no output channels are selected or FRFs cannot be consistently estimated.
-        Notes
-        -----
-        Typical usage of the returned EMA model is:
-        1) Compute poles with LSCF::
+        model : sdypy.EMA.Model
+
+        Typical usage
+        -------------
+        After constructing the model with ``test.ema(...)``:
+
+        1) Get poles (LSCF)::
                model.get_poles()
-        2) Select stable poles either interactively (stability chart)::
+        2) Select stable poles (interactive or automatic)::
                model.select_poles()
-           or automatically if approximate natural frequencies are known::
+              or
                model.select_closest_poles([f1, f2, ...])
-        3) Reconstruct FRFs and get modal constants (LSFD)::
-               H_rec, A = model.get_constants(method="lsfd")
-        4) Access modal parameters::
-               model.nat_freq   # natural frequencies
-               model.nat_xi     # damping ratios
-               model.phi        # modal shapes, if a driving_point was specified
+        3) Print modal data (natural frequencies, damping and mode shapes)::
+               acc.print_modal_data()
+              or
+               print(model.nat_freq)
+               print(model.nat_xi)
+               print(model.phi)
+        4) Reconstruct FRFs and modal constants::
+               frf_rec, modal_const = model.get_constants()
         """
         try:
             from sdypy import EMA
         except ImportError as exc:
             raise ImportError(
-                "Experimental modal analysis requires the optional dependency 'sdypy'. "
-                "Install it with 'pip install sdypy' or 'pip install sdypy-EMA'."
+                "Experimental modal analysis requires the optional dependency "
+                "'sdypy'. Install it with 'pip install sdypy-EMA'."
             ) from exc
+        # Resolve channels
         if isinstance(input, Channel):
-            if input not in self.channels:
-                raise ValueError("Input Channel is not part of this Test.")
             ch_in = input
         else:
             ch_in = self[input]
-        output_channels = list(self.iter_channels(outputs))
-        if not output_channels:
-            raise ValueError("No output channels selected for EMA.")
-        f_ref: np.ndarray | None = None
-        H_rows: list[np.ndarray] = []
-        for ch_out in output_channels:
-            f, H_xy = self.transfer_function(
+        outs = list(self.iter_channels(outputs))
+        if not outs:
+            raise ValueError("No output channels selected.")
+        # Compute FRFs for each output channel
+        f_ref = None
+        H_rows = []
+        for ch_out in outs:
+            f, H = self.transfer_function(
                 x=ch_in,
                 y=ch_out,
                 kind=kind,
                 processed=processed,
                 use_cache=use_cache,
-                **kwargs,
             )
             if f_ref is None:
                 f_ref = f
-            else:
-                if f.shape != f_ref.shape or not np.allclose(f, f_ref):
-                    raise ValueError(
-                        "All FRFs must share the same frequency vector for EMA."
-                    )
-            H_rows.append(H_xy)
-        assert f_ref is not None
+            elif f.shape != f_ref.shape or not np.allclose(f, f_ref):
+                raise ValueError("FRFs must share identical frequency grids.")
+            H_rows.append(H)
         frf_matrix = np.vstack(H_rows)
-        if lower >= upper:
-            raise ValueError("Argument 'lower' must be smaller than 'upper'.")
-        mask = (f_ref >= lower) & (f_ref <= upper)
-        if not np.any(mask):
-            raise ValueError(
-                "No frequency points within the specified [lower, upper] band."
-            )
-        f_band = f_ref[mask]
-        frf_band = frf_matrix[:, mask]
-        if driving_point is not None:
-            if not (0 <= driving_point < frf_band.shape[0]):
-                raise ValueError(
-                    "driving_point index is out of range for the FRF matrix."
-                )
+        # Pass EVERYTHING to EMA.Model
         model = EMA.Model(
-            frf_band,
-            f_band,
-            lower=float(lower),
-            upper=float(upper),
-            pol_order_high=int(pol_order_high),
-            driving_point=driving_point,
-            frf_type=frf_type,
+            frf_matrix,
+            f_ref,
+            **model_kwargs,
         )
-        return model
-
-    def ema_stabilization_diagram(
-        self,
-        input: ChannelKey,
-        outputs: ChannelSelector,
-        *,
-        lower: float,
-        upper: float,
-        pol_order_high: int = 60,
-        driving_point: int | None = None,
-        frf_type: str = "accelerance",
-        kind: str = "H1",
-        processed: bool = True,
-        use_cache: bool = True,
-        **kwargs: Any,
-    ):
-        """
-        Compute an sdypy-EMA Model and display its stabilization diagram.
-        This is a convenience wrapper around ``ema_lscf`` that builds the EMA model, computes poles using LSCF and then calls ``model.select_poles()`` to open the stability chart for interactive selection of stable poles.
-        Parameters
-        ----------
-        input :
-            Input (excitation) channel key (index, name or Channel instance).
-        outputs :
-            Selector for output (response) channels (index, name, list, slice, etc.).
-        lower : float
-            Lower frequency limit in Hz for pole estimation (``lower`` in ``EMA.Model``).
-        upper : float
-            Upper frequency limit in Hz for pole estimation (``upper`` in ``EMA.Model``).
-        pol_order_high : int, optional
-            Highest polynomial order for LSCF (``pol_order_high`` in ``EMA.Model``, default 60).
-        driving_point : int or None, optional
-            Index of the driving FRF location in the FRF matrix (row index). If None (default), no driving point is used and modal shapes are not scaled.
-        frf_type : {"accelerance","mobility","receptance"}, optional
-            Type of FRF passed to ``EMA.Model`` (default "accelerance").
-        kind : {"H1","H2"}, optional
-            Transfer-function estimator for FRFs (default "H1", see ``Test.transfer_function``).
-        processed : bool, optional
-            If True (default), use processed data from each channel for FRF estimation.
-        use_cache : bool, optional
-            If True (default), use the Channel-level processing cache.
-        **kwargs :
-            Additional keyword arguments forwarded to ``Test.transfer_function`` and ultimately to ``scipy.signal.csd`` (e.g. ``nperseg``, ``window``, ``noverlap``).
-        Returns
-        -------
-        model :
-            Instance of ``sdypy.EMA.Model`` after pole computation. Stable poles can be read via attributes such as ``model.nat_freq`` and ``model.nat_xi`` once selection is complete.
-        Raises
-        ------
-        ImportError
-            If the optional dependency ``sdypy`` (and its EMA module) is not installed.
-        Notes
-        -----
-        This method performs three steps:
-        1) Builds the EMA model from pyDySP data using :meth:`ema_lscf`.
-        2) Calls ``model.get_poles()`` to compute poles for all orders up to ``pol_order_high``.
-        3) Calls ``model.select_poles()`` to display the stabilization chart, where you interactively pick stable poles. After closing the chart, modal parameters are available via ``model.nat_freq``, ``model.nat_xi`` and, if a driving point is given, ``model.phi``.
-        """
-        model = self.ema_lscf(
-            input=input,
-            outputs=outputs,
-            lower=lower,
-            upper=upper,
-            pol_order_high=pol_order_high,
-            driving_point=driving_point,
-            frf_type=frf_type,
-            kind=kind,
-            processed=processed,
-            use_cache=use_cache,
-            **kwargs,
-        )
-        model.get_poles()
-        model.select_poles()
         return model
 
     # ------------------------------------------------------------------ #
@@ -1912,12 +1806,11 @@ class Test:
     def plot_grid(
         self,
         layout: Any,
-        *,
         plot_type: str = "Timehistory",
         sharex: bool = True,
         sharey: bool = True,
         title_suffix: str | None = None,
-        make_caption: bool = False,
+        make_caption: bool = True,
         **kwargs: Any,
     ):
         """
@@ -1971,9 +1864,6 @@ class Test:
             If ``make_caption`` is True, a suggested figure caption is returned
             as a third element.
         """
-        import matplotlib.pyplot as plt
-        import numpy as np
-
         normalized = self._normalize_layout(layout)
         n_rows = len(normalized)
         n_cols = len(normalized[0])
@@ -2051,7 +1941,6 @@ class Test:
     def plot_channels(
         self,
         selector: Any,
-        *,
         ncols: int = 3,
         plot_type: str = "Timehistory",
         sharex: bool = True,
