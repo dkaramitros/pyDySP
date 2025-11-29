@@ -2029,3 +2029,144 @@ class Test:
             make_caption=make_caption,
             **kwargs,
         )
+
+    def channel_health(
+        self,
+        selector: ChannelSelector = None,
+        fraction_for_event: float = 0.05,
+        min_peak: float | None = None,
+        min_snr: float = 3.0,
+        min_crest: float = 2.0,
+        processed: bool = True,
+        use_cache: bool = True,
+        tablefmt: str = "github",
+    ) -> str:
+        """
+        Check basic health of selected channels using simple time-domain
+        metrics and return a tabulated string summarizing the results.
+
+        Parameters
+        ----------
+        selector :
+            Which channels to inspect. If None, all channels are checked.
+        fraction_for_event :
+            Fraction of the peak used to define the event window.
+        min_peak :
+            Minimum acceptable peak amplitude. If None, not applied.
+        min_snr :
+            Minimum RMS(event)/RMS(pre-event) ratio for a healthy response.
+        min_crest :
+            Minimum crest factor (peak/RMS) for a healthy response.
+        processed, use_cache :
+            Passed to ``Channel.xy``.
+        tablefmt :
+            Tabulate format for the returned table.
+
+        Returns
+        -------
+        str
+            The health check table as a formatted string.
+        """
+        headers = [
+            "idx",
+            "name",
+            "peak",
+            "rms",
+            "crest",
+            "t_start",
+            "t_end",
+            "dur",
+            "rms_pre",
+            "snr_pre",
+            "status",
+        ]
+        rows = []
+
+        channels = list(self.iter_channels(selector=selector))
+        if not channels:
+            return "No channels selected for health check."
+
+        for ch in channels:
+            idx = self.channels.index(ch)
+            name = ch.name_user or ch.name_input or f"ch{idx}"
+
+            try:
+                t, y = ch.xy(processed=processed, use_cache=use_cache)
+            except Exception as err:
+                rows.append([idx, name] + ["-"] * 8 + [f"error: {err}"])
+                continue
+
+            if y.size == 0:
+                rows.append([idx, name, 0, 0, "-", "-", "-", "-", "-", "-", "empty"])
+                continue
+
+            peak = float(np.max(np.abs(y)))
+            rms = float(np.sqrt(np.mean(y**2))) if y.size else 0.0
+            crest = peak / rms if rms > 0 else float("nan")
+
+            t_start = t_end = dur = rms_pre = snr_pre = float("nan")
+
+            if peak <= 0.0:
+                status = "dead"
+            else:
+                thr = fraction_for_event * peak
+                mask = np.abs(y) >= thr
+
+                if not np.any(mask):
+                    status = "no event"
+                else:
+                    i_start = int(np.argmax(mask))
+                    i_end = int(len(mask) - 1 - np.argmax(mask[::-1]))
+
+                    t_start = float(t[i_start])
+                    t_end = float(t[i_end])
+                    dur = t_end - t_start
+
+                    if i_start > 0:
+                        y_pre = y[:i_start]
+                        rms_pre = float(np.sqrt(np.mean(y_pre**2)))
+                    else:
+                        rms_pre = float("nan")
+
+                    y_evt = y[i_start : i_end + 1]
+                    rms_evt = float(np.sqrt(np.mean(y_evt**2)))
+                    snr_pre = (
+                        rms_evt / rms_pre
+                        if (rms_pre > 0 and np.isfinite(rms_pre))
+                        else float("nan")
+                    )
+
+                    ok_peak = (min_peak is None) or (peak >= min_peak)
+                    ok_snr = np.isfinite(snr_pre) and (snr_pre >= min_snr)
+                    ok_crest = np.isfinite(crest) and (crest >= min_crest)
+
+                    if ok_peak and ok_snr and ok_crest:
+                        status = "ok"
+                    elif ok_peak and (ok_snr or ok_crest):
+                        status = "weak response"
+                    else:
+                        status = "noise"
+
+            rows.append(
+                [
+                    idx,
+                    name,
+                    f"{peak:.3g}",
+                    f"{rms:.3g}",
+                    f"{crest:.3g}" if np.isfinite(crest) else "-",
+                    f"{t_start:.3g}" if np.isfinite(t_start) else "-",
+                    f"{t_end:.3g}" if np.isfinite(t_end) else "-",
+                    f"{dur:.3g}" if np.isfinite(dur) else "-",
+                    f"{rms_pre:.3g}" if np.isfinite(rms_pre) else "-",
+                    f"{snr_pre:.3g}" if np.isfinite(snr_pre) else "-",
+                    status,
+                ]
+            )
+
+        return tabulate(
+            rows,
+            headers=headers,
+            tablefmt=tablefmt,
+            numalign="right",
+            stralign="left",
+        )
