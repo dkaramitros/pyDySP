@@ -1,4 +1,4 @@
-# pyDySP
+# pyDySP  
 Dynamic Signal Processing for Experimental Data
 
 [![Tests](https://github.com/dkaramitros/pyDySP/actions/workflows/tests.yml/badge.svg)](https://github.com/dkaramitros/pyDySP/actions/workflows/tests.yml)
@@ -15,15 +15,15 @@ Dynamic Signal Processing for Experimental Data
 It provides:
 
 - A **Channel** class for time-history signals  
-  (drift correction, filtering, baseline, trimming, spectra, Arias intensity, response spectra, plots, metadata).
-- A **Test** container class for multi-channel experiments  
-  (selection by index/name/tags, batch processing, cross-spectra, transfer functions, modal analysis via sdypy, plotting utilities, csv/mat I/O).
-- Clean, readable code designed for notebooks, research reports, and reproducible workflows.
-- Full internal documentation (docstrings) and a growing library of example notebooks.
+  (processing, spectra, trimming, Arias, response spectra, plots, metadata).
+- A **Test** class for multi-channel experiments  
+  (selection, batch processing, cross-spectra, transfer functions, modal analysis via *sdypy*, plotting utilities, `.mat`/`.csv` I/O).
+- Clean, readable, notebook-friendly code for research, teaching and reproducible workflows.
+- Full internal documentation and example notebooks.
 
 ## Table of Contents
 
-- [pyDySP — Dynamic Signal Processing for Experimental Data](#pydysp--dynamic-signal-processing-for-experimental-data)
+- [pyDySP](#pydysp)
   - [Table of Contents](#table-of-contents)
   - [Installation](#installation)
     - [Option A — Install from PyPI (recommended)](#option-a--install-from-pypi-recommended)
@@ -35,7 +35,7 @@ It provides:
   - [Dependencies](#dependencies)
   - [Quick Start](#quick-start)
     - [Single channel](#single-channel)
-    - [Multi‑channel test](#multichannel-test)
+    - [Multi-channel test](#multi-channel-test)
     - [Spectra \& trimming](#spectra--trimming)
     - [Response spectrum](#response-spectrum)
     - [Transfer functions](#transfer-functions)
@@ -57,7 +57,7 @@ It provides:
 pip install pydysp
 ```
 
-If using Jupyter notebooks:
+For Jupyter notebooks:
 
 ```bash
 pip install ipykernel
@@ -86,7 +86,7 @@ from pydysp import Channel, Test
 ```bash
 python -m venv .venv
 source .venv/bin/activate      # Linux/Mac
-.venv\Scripts\activate       # Windows
+.venv\Scripts\activate         # Windows
 pip install pydysp
 ```
 
@@ -99,6 +99,8 @@ pip install pydysp
 ```
 
 ## Dependencies
+
+Required:
 
 - numpy  
 - scipy  
@@ -124,14 +126,15 @@ t = np.arange(0, 10, dt)
 y = np.sin(2*np.pi*2*t)
 
 ch = Channel(data=y, dt=dt, name_user="Acc1", quantity="acceleration", units="g")
-t_proc, y_proc = ch.processed()
 ch.plot()
+t_proc, y_proc = ch.processed()
 ```
 
-### Multi‑channel test
+### Multi-channel test
 
 ```python
 from pydysp import Test
+
 test = Test.from_channels(name="MyTest", channels=[ch1, ch2])
 print(test.info())
 test.plot_channels(ncols=2)
@@ -177,27 +180,27 @@ model.print_modal_data()
 ## Features
 
 ### Channel
-- Drift, filter, baseline  
-- Trim (threshold, fraction, Arias)  
+- Drift correction, filtering, baseline correction  
+- Trimming (threshold, fraction, Arias)  
 - Fourier & Welch spectra  
 - Arias intensity  
 - Response spectrum  
-- Time‑domain metrics  
-- Rich metadata  
+- Time-domain metrics  
+- Metadata support  
 - Plot utilities  
 
 ### Test
-- Channel selection (index, name, tags, slices)  
+- Channel selection (by index, name, tags, slices)  
 - Batch processing  
-- Cross‑spectra, TFs, delays  
-- Modal analysis (sdypy)  
+- Cross-spectra, transfer functions, delays  
+- Modal analysis (via *sdypy*)  
 - `.mat` (SoFSI/EQUALS) and `.csv` I/O  
-- Grid plots & channel lists  
+- Grid plots & channel summary tables  
 - Health diagnostics  
 
 ## Example Notebooks
 
-Available in:
+Located in:
 
 ```
 examples/
@@ -209,11 +212,27 @@ https://pydysp.readthedocs.io/en/latest/
 
 ## Contributing
 
-```bash
-pip install -e .
-pip install pytest
-pytest -q
-```
+Contributions are very welcome — whether bug reports, small fixes, feature ideas, or full pull requests.
+
+To contribute:
+
+1. **Fork** the repository on GitHub  
+2. **Create a branch** for your change  
+3. **Commit** your edits with clear messages  
+4. **Run the tests** locally:
+
+   ```bash
+   pip install -e .
+   pip install pytest
+   pytest -q
+   ```
+
+5. **Open a Pull Request** describing the change and its motivation
+
+Please keep code style readable and consistent with the existing project  
+(docstrings, small focused functions, and meaningful error messages).
+
+If you prefer to discuss an idea before writing code, feel free to open a **GitHub Issue**.
 
 ## License
 
