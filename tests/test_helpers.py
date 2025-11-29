@@ -23,7 +23,7 @@ def make_sine_channel(
     duration: float = 2.0,
     units: str | None = "m/s^2",
 ) -> Channel:
-    """Simple sine-wave channel, similar to other tests."""
+    """Create a simple sine-wave Channel for peak-annotation tests."""
     dt = 1.0 / fs
     t = np.arange(0.0, duration, dt)
     y = np.sin(2.0 * np.pi * f0 * t)

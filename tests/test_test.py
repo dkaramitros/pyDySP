@@ -7,6 +7,11 @@ from pydysp.channel import Channel
 from pydysp.test import Test
 
 
+# ----------------------------------------------------------------------
+# Fixtures / helpers
+# ----------------------------------------------------------------------
+
+
 def make_channel(
     n: int = 1000,
     dt: float = 0.01,
@@ -31,6 +36,22 @@ def make_channel(
         units=units,
         tags=tags or set(),
     )
+
+
+def make_ch(data, dt: float = 0.01, name: str = "Ch") -> Channel:
+    """Helper for channel_health tests with explicit data arrays."""
+    return Channel(
+        data=np.asarray(data),
+        dt=dt,
+        name_user=name,
+        quantity="acceleration",
+        units="g",
+    )
+
+
+# ----------------------------------------------------------------------
+# Construction / basic properties
+# ----------------------------------------------------------------------
 
 
 def test_from_channels_and_basic_properties():
@@ -148,6 +169,11 @@ def test_info_returns_reasonable_string():
     assert "name" in info
 
 
+# ----------------------------------------------------------------------
+# CSV I/O
+# ----------------------------------------------------------------------
+
+
 def test_to_csv_and_from_csv_roundtrip(tmp_path):
     dt = 0.01
     ch1 = make_channel(n=200, dt=dt, name_user="Acc1")
@@ -169,6 +195,11 @@ def test_to_csv_and_from_csv_roundtrip(tmp_path):
     t2, y2 = test2[0].xy()
     assert np.allclose(t1, t2)
     assert np.allclose(y1, y2)
+
+
+# ----------------------------------------------------------------------
+# Spectral analyses and transfer functions
+# ----------------------------------------------------------------------
 
 
 def test_cross_spectrum_shapes():
@@ -209,8 +240,8 @@ def test_transfer_function_shapes_and_kind_switch():
         test.transfer_function("In", "Out", kind="invalid")
 
 
-def test_plot_transfer_function_smoke(monkeypatch):
-    # Use non-interactive backend
+def test_plot_transfer_function_smoke():
+    """Smoke tests for magnitude-only and magnitude+phase transfer function plots."""
     plt.switch_backend("Agg")
 
     dt = 0.01
@@ -255,6 +286,11 @@ def test_time_delay_estimation_sign_and_magnitude():
     assert abs(tau) == pytest.approx(k * dt, rel=1e-1)
 
 
+# ----------------------------------------------------------------------
+# Arias-based trimming
+# ----------------------------------------------------------------------
+
+
 def test_trimmed_by_arias_reduces_duration():
     dt = 0.01
     n = 2000
@@ -281,8 +317,13 @@ def test_trimmed_by_arias_reduces_duration():
     assert trimmed.duration < original_duration
 
 
-def test_plot_channels_and_grid_smoke(monkeypatch):
-    # Use non-interactive backend
+# ----------------------------------------------------------------------
+# Plotting helpers on Test
+# ----------------------------------------------------------------------
+
+
+def test_plot_channels_and_grid_smoke():
+    """Smoke tests for Test.plot_channels and Test.plot_grid."""
     plt.switch_backend("Agg")
 
     ch1 = make_channel(name_user="Acc1")
@@ -304,30 +345,21 @@ def test_plot_channels_and_grid_smoke(monkeypatch):
     plt.close(fig2)
 
 
-import numpy as np
-from pydysp.channel import Channel
-from pydysp.test import Test
-
-
-def make_ch(data, dt=0.01, name="Ch"):
-    return Channel(
-        data=np.asarray(data),
-        dt=dt,
-        name_user=name,
-        quantity="acceleration",
-        units="g",
-    )
+# ----------------------------------------------------------------------
+# Channel health report
+# ----------------------------------------------------------------------
 
 
 def test_channel_health_basic():
+    """Basic sanity checks for the channel_health report."""
     # Dead channel (all zeros)
     dead = make_ch(np.zeros(1000), name="Dead")
 
-    # Noise channel: small random values (no burst)
+    # Noise channel: small random values (no clear burst)
     rng = np.random.default_rng(0)
     noise = make_ch(0.001 * rng.standard_normal(2000), name="Noise")
 
-    # Good channel: clear event from t=2–4
+    # Good channel: clear event from t=2–4 s
     dt = 0.01
     t = np.arange(2000) * dt
     y = 0.001 * rng.standard_normal(2000)
@@ -346,13 +378,15 @@ def test_channel_health_basic():
     assert "Good" in report
 
     # Status keywords
-    assert "dead" in report.lower()
-    assert "no event" in report.lower() or "noise" in report.lower()
-    assert (
-        "ok" in report.lower()
-        or "weak" in report.lower()
-        or "response" in report.lower()
-    )
+    lower = report.lower()
+    assert "dead" in lower
+    assert "no event" in lower or "noise" in lower
+    assert "ok" in lower or "weak" in lower or "response" in lower
+
+
+# ----------------------------------------------------------------------
+# Channel metadata CSV import/export
+# ----------------------------------------------------------------------
 
 
 def test_channel_info_to_csv_removes_redundant(tmp_path):
@@ -368,7 +402,7 @@ def test_channel_info_to_csv_removes_redundant(tmp_path):
         reader = csv.reader(f)
         header = next(reader)
 
-    # idx always present
+    # Only the index column should remain after removing redundant fields
     assert header == ["idx"]
 
 
@@ -382,7 +416,7 @@ def test_import_csv_raises_on_unmatched_row(tmp_path):
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["name_user", "units"])
-        writer.writerow(["NonexistentChannel", "g"])  # <-- must trigger error
+        writer.writerow(["NonexistentChannel", "g"])  # must trigger error
 
     with pytest.raises(ValueError):
         test.with_channel_info_from_csv(str(csv_path))

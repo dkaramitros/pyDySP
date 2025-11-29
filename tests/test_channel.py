@@ -16,6 +16,7 @@ def make_sine_channel(
     duration: float = 2.0,
     amplitude: float = 1.0,
 ) -> Channel:
+    """Convenience helper to create a simple sine-wave Channel."""
     dt = 1.0 / fs
     t = np.arange(0.0, duration, dt)
     y = amplitude * np.sin(2.0 * np.pi * f0 * t)
@@ -60,24 +61,18 @@ def test_channel_info_contains_basic_fields():
 
 
 def test_channel_duration_computes_correctly():
-    import numpy as np
-    from pydysp.channel import Channel
-    import pytest
-
     dt = 0.01
     t = np.arange(0, 5, dt)
     y = np.sin(2 * np.pi * t)
 
     ch = Channel(data=y, dt=dt)
 
-    expected_duration = t[-1] - t[0]  # same definition used in Test.duration
+    # Same definition as Test.duration (last minus first sample)
+    expected_duration = t[-1] - t[0]
     assert ch.duration == pytest.approx(expected_duration)
 
 
 def test_channel_duration_empty_signal():
-    import numpy as np
-    from pydysp.channel import Channel
-
     ch = Channel(data=np.array([]), dt=0.01)
     assert ch.duration == 0.0
 
@@ -97,7 +92,7 @@ def test_drift_corrected_removes_initial_mean():
 
     ch_dc = ch.drift_corrected(points=100)
     _, y_dc = ch_dc.processed(use_cache=False)
-    # mean of first 100 samples should be ~0
+    # Mean of first 100 samples should be ~0 after drift correction
     assert np.mean(y_dc[:100]) == pytest.approx(0.0, abs=1e-3)
 
 
@@ -121,7 +116,7 @@ def test_trim_by_threshold():
     dt = 1.0 / fs
     t = np.arange(0.0, 4.0, dt)
     y = np.zeros_like(t)
-    # Pulse between 1s and 3s at amplitude 1.0
+    # Pulse between 1 s and 3 s at amplitude 1.0
     y[(t >= 1.0) & (t <= 3.0)] = 1.0
     ch = Channel(data=y, dt=dt)
 
@@ -156,6 +151,7 @@ def test_max_min_rms_simple_sine():
     assert y_min == pytest.approx(-2.0, rel=0.05)
     # RMS of sine with amplitude A is A/sqrt(2)
     assert rms == pytest.approx(2.0 / np.sqrt(2), rel=0.05)
+
     # max_abs should correspond to either y_max or y_min
     t_abs, y_abs = ch.max_abs()
     assert abs(y_abs) == pytest.approx(2.0, rel=0.05)
@@ -168,11 +164,9 @@ def test_max_min_rms_simple_sine():
 
 
 def test_channel_fourier_peak_matches_frequency():
-    import pytest as _pytest
-
     ch = make_sine_channel(f0=5.0, fs=200.0, duration=2.0)
     f_peak, _ = ch.fourier_peak()
-    assert f_peak == _pytest.approx(5.0, rel=0.02)
+    assert f_peak == pytest.approx(5.0, rel=0.02)
 
 
 def test_channel_welch_peak_matches_frequency():
@@ -203,6 +197,7 @@ def test_trim_by_arias_reduces_duration():
     t_full, _ = ch.xy(processed=False)
     t_trim, _ = ch_trim.processed(use_cache=False)
 
+    # Duration after Arias-based trimming should be shorter than full record
     assert t_trim[-1] - t_trim[0] < t_full[-1] - t_full[0]
 
 
@@ -231,7 +226,7 @@ def test_response_spectrum_smoke_nonzero_signal():
     periods = np.array([0.5, 1.0, 2.0])
     rs = ch.response_spectrum(periods=periods, g=9.81, ksi=0.05)
 
-    # Just basic sanity checks
+    # Basic sanity checks on shapes and values
     assert rs.T.shape == periods.shape
     assert rs.Sd.shape == periods.shape
     assert rs.Sv.shape == periods.shape
@@ -254,14 +249,19 @@ def test_channel_plot_smoke():
 
 def test_channel_spectral_plots_smoke():
     ch = make_sine_channel()
+
     fig1, ax1 = plt.subplots()
     ch.plot_fourier(ax=ax1, fmax=20.0)
+
     fig2, ax2 = plt.subplots()
     ch.plot_psd(ax=ax2, fmax=20.0)
+
     fig3, ax3 = plt.subplots()
     ch.plot_arias(ax=ax3, g=9.81, show_window=True)
+
     fig4, ax4 = plt.subplots()
     ch.plot_response_spectrum(ax=ax4, periods=np.array([0.5, 1.0, 2.0]))
+
     plt.close(fig1)
     plt.close(fig2)
     plt.close(fig3)
@@ -272,7 +272,7 @@ def test_channel_plot_type_dispatch_smoke():
     """Channel.plot should delegate correctly for supported plot_type values."""
     ch = make_sine_channel()
 
-    # time history
+    # Time history
     fig1, ax1 = plt.subplots()
     ch.plot(ax=ax1, plot_type="timehistory", include_label=True, include_legend=True)
     plt.close(fig1)
