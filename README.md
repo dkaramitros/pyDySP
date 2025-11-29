@@ -1,4 +1,5 @@
-# pyDySP — Dynamic Signal Processing for Experimental Data
+# pyDySP
+Dynamic Signal Processing for Experimental Data
 
 [![Tests](https://github.com/dkaramitros/pyDySP/actions/workflows/tests.yml/badge.svg)](https://github.com/dkaramitros/pyDySP/actions/workflows/tests.yml)
 [![Docs](https://img.shields.io/readthedocs/pydysp)](https://pydysp.readthedocs.io/en/latest/)
@@ -8,8 +9,8 @@
 ![License](https://img.shields.io/github/license/dkaramitros/pyDySP)
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/dkaramitros/pyDySP/HEAD?labpath=examples%2Fdemo.ipynb)
 
-**pyDySP** is a lightweight Python library for **dynamic signal processing** of experimental data, developed at  
-*the Shaking Table and SoFSI Laboratories — University of Bristol*.
+**pyDySP** is a lightweight Python library for **dynamic signal processing** of experimental data, developed for  
+*the EQUALS and SoFSI Laboratories* at the *University of Bristol*.
 
 It provides:
 
@@ -19,8 +20,6 @@ It provides:
   (selection by index/name/tags, batch processing, cross-spectra, transfer functions, modal analysis via sdypy, plotting utilities, csv/mat I/O).
 - Clean, readable code designed for notebooks, research reports, and reproducible workflows.
 - Full internal documentation (docstrings) and a growing library of example notebooks.
-
----
 
 ## Table of Contents
 
@@ -50,8 +49,6 @@ It provides:
   - [Contributing](#contributing)
   - [License](#license)
 
----
-
 ## Installation
 
 ### Option A — Install from PyPI (recommended)
@@ -64,7 +61,6 @@ If using Jupyter notebooks:
 
 ```bash
 pip install ipykernel
-python -m ipykernel install --user --name pydysp-env
 ```
 
 ### Option B — Developer installation (editable)
@@ -82,8 +78,6 @@ import sys
 sys.path.append("/path/to/parent/of/pydysp")
 from pydysp import Channel, Test
 ```
-
----
 
 ## Environment Setup
 
@@ -104,8 +98,6 @@ mamba activate pydysp
 pip install pydysp
 ```
 
----
-
 ## Dependencies
 
 - numpy  
@@ -118,8 +110,6 @@ Optional (for modal analysis):
 ```bash
 pip install sdypy-EMA
 ```
-
----
 
 ## Quick Start
 
@@ -184,8 +174,6 @@ model.select_poles()
 model.print_modal_data()
 ```
 
----
-
 ## Features
 
 ### Channel
@@ -207,8 +195,6 @@ model.print_modal_data()
 - Grid plots & channel lists  
 - Health diagnostics  
 
----
-
 ## Example Notebooks
 
 Available in:
@@ -217,13 +203,9 @@ Available in:
 examples/
 ```
 
----
-
 ## Documentation
 
 https://pydysp.readthedocs.io/en/latest/
-
----
 
 ## Contributing
 
@@ -232,8 +214,6 @@ pip install -e .
 pip install pytest
 pytest -q
 ```
-
----
 
 ## License
 
