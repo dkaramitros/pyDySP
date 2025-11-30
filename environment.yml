@@ -11,5 +11,6 @@ dependencies:
   - pip
 
   - pip:
+      - -e .
       - tabulate
       # - sdypy-EMA
