@@ -9,11 +9,19 @@ dependencies:
   - matplotlib
   # for jupyter notebooks
   - ipykernel
+  # development dependencies
+  - pytest
+  - sphinx
+  - sphinx-rtd-theme
   # pip dependencies
   - pip
 
   - pip:
       - -e .
       - tabulate
+      # development dependencies
+      - black
+      - ruff
+      - pre-commit
       # optional dependencies
-      # - sdypy-EMA
+      - sdypy-EMA

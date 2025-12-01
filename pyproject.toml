@@ -37,8 +37,6 @@ dev = [
   "sphinx-rtd-theme",
   "black",
   "ruff",
-  "pipreqs",
-  "pip-check-reqs",
   "pre-commit",
 ]
 ema = [
