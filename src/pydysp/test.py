@@ -426,41 +426,57 @@ class Test:
             Multi-line string summary (not printed automatically).
         """
         lines: list[str] = []
-        # Test-level metadata
-        lines.append(f"Test: {self.name or '<unnamed>'}")
+
+        # Header (formatted consistently with Channel.info)
+        title = self.name or "<unnamed>"
+        header = f"Test: {title}"
+        lines.append(header)
+        lines.append("-" * len(header))
+
+        # Basic test-level metadata
         if self.description:
-            lines.append(f"  Description : {self.description}")
+            lines.append(f"Description: {self.description}")
         if self.source_file:
-            lines.append(f"  Source file : {self.source_file}")
+            lines.append(f"Source file: {self.source_file}")
         if self.timestamp:
-            lines.append(f"  Timestamp   : {self.timestamp}")
-        lines.append(f"  Channels    : {self.n_channels}")
+            lines.append(f"Timestamp: {self.timestamp}")
+        lines.append(f"Channels: {self.n_channels}")
+
         # Timesteps
         try:
             n_ts = self.n_timesteps
-            lines.append(f"  Timesteps   : {n_ts}")
+            lines.append(f"Timesteps: {n_ts}")
         except ValueError as err:
-            lines.append(f"  Timesteps   : <inconsistent> ({err})")
+            lines.append(f"Timesteps: <inconsistent> ({err})")
+
         # Duration
         try:
             dur = self.duration
-            lines.append(f"  Duration    : {dur:.6g} s")
+            lines.append(f"Duration: {dur:.6g} s")
         except ValueError as err:
-            lines.append(f"  Duration    : <inconsistent> ({err})")
+            lines.append(f"Duration: <inconsistent> ({err})")
+
         # Sampling
         try:
             dt = self.dt
             fs = float("inf") if dt == 0 else 1.0 / dt
-            lines.append(f"  Sampling    : dt={dt:.6g} s, fs={fs:.6g} Hz")
+            lines.append(f"Sampling: dt={dt:.6g} s, fs={fs:.6g} Hz")
         except ValueError as err:
-            lines.append(f"  Sampling    : <inconsistent> ({err})")
-        # Tags and meta
+            lines.append(f"Sampling: <inconsistent> ({err})")
+
+        # Tags (if any)
         if self.tags:
-            lines.append(f"  Test tags   : {', '.join(sorted(self.tags))}")
+            lines.append("\nTags:")
+            taglist = "\n  ".join(sorted(self.tags))
+            lines.append(f"  {taglist}")
+
+        # Free-form metadata
         if self.meta:
-            meta_keys = ", ".join(sorted(self.meta.keys()))
-            lines.append(f"  Meta keys   : {meta_keys}")
-        # Channel table
+            lines.append("\nMetadata:")
+            for k, v in self.meta.items():
+                lines.append(f"  {k}: {v}")
+
+        # Channel table (blank line before)
         lines.append("")
         # Build table data: rows and headers
         headers = [
@@ -470,6 +486,7 @@ class Test:
             "quantity",
             "units",
             "tags",
+            "calibration_factor",
         ]
         table_rows = []
         for i, ch in enumerate(self.channels):
@@ -481,6 +498,11 @@ class Test:
                     ch.quantity or "-",
                     ch.units or "-",
                     ",".join(sorted(ch.tags)) if ch.tags else "-",
+                    (
+                        f"{ch.calibration_factor:g}"
+                        if ch.calibration_factor is not None
+                        else "-"
+                    ),
                 ]
             )
         # Format table
@@ -2049,9 +2071,9 @@ class Test:
             If ``True`` (default), use the channel-level processing cache.
         **kwargs
             Additional keyword arguments forwarded to
-            :func:`scipy.signal.csd`, e.g. ``nperseg``, ``window``,
-            ``noverlap``. If ``nperseg`` is not given, a MATLAB-like
-            default of ``min(256, n)`` is used.
+            :func:`scipy.signal.csd`, e.g. ``nperseg``, ``window``, ``noverlap``.
+            If ``nperseg`` is not given, a MATLAB-like default of ``min(256, n)``
+            is used.
 
         Returns
         -------
