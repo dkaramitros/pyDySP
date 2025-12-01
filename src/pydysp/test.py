@@ -1124,7 +1124,7 @@ class Test:
                 if f == "tags":
                     v = tuple(sorted(v)) if v else ()
                 values.append(v)
-            if len(set(values)) > 1:  # at least one channel differs
+            if len(set(values)) > 0:
                 fields_to_export.append(f)
         with open(filename, "w", newline="") as f:
             writer = csv.writer(f)
