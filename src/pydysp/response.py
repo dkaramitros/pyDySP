@@ -200,12 +200,10 @@ def sdof_newmark_response(
     for i in range(n - 1):
         dp = (
             p[i + 1]
-            - p[i]
             + m * (a0 * u[i] + a2 * v[i] + a3 * a_rel[i])
             + c * (a1 * u[i] + a4 * v[i] + a5 * a_rel[i])
         )
-        du = dp / k_eff
-        u[i + 1] = u[i] + du
+        u[i + 1] = dp / k_eff
         a_rel[i + 1] = a0 * (u[i + 1] - u[i]) - a2 * v[i] - a3 * a_rel[i]
         v[i + 1] = v[i] + dt * ((1.0 - gamma) * a_rel[i] + gamma * a_rel[i + 1])
 
