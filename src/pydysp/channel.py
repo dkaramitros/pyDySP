@@ -207,7 +207,7 @@ class Channel:
         """
         if self.data.size == 0:
             return 0.0
-        t = self.time
+        t, _ = self.processed()
         return float(t[-1] - t[0])
 
     # ------------------------------------------------------------------ #
