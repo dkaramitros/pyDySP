@@ -1,5 +1,5 @@
-idx,name_user,label_axis,label_legend,description_long
-0,Channel 1,Channel 1 [g],Channel 1,Main signal
-1,Channel 2,Channel 2 [g],Channel 2,Time-shifted signal
-2,Channel 3,Channel 3 [g],Channel 3,SDOF Response signal
-3,Channel 4,Channel 4 [g],Channel 4,Noise signal
+idx,name_user,name_input,quantity,units,raw_units,label_axis,label_legend,description_long,calibration_factor,tags
+0,Channel 1,,acceleration,g,,Channel 1 [g],Channel 1,Main signal,4.0,"drift_corrected,filtered,q:acceleration,synthetic"
+1,Channel 2,,acceleration,g,,Channel 2 [g],Channel 2,Time-shifted signal,4.0,"drift_corrected,filtered,q:acceleration,synthetic"
+2,Channel 3,,acceleration,g,,Channel 3 [g],Channel 3,Noise signal,4.0,"drift_corrected,filtered,q:acceleration,synthetic"
+3,Channel 4,,acceleration,g,,Channel 4 [g],Channel 4,SDOF Response signal,4.0,"drift_corrected,filtered,q:acceleration,synthetic"
