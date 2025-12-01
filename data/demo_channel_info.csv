@@ -1,0 +1,5 @@
+idx,name_user,label_axis,label_legend,description_long
+0,Channel 1,Channel 1 [g],Channel 1,Main signal
+1,Channel 2,Channel 2 [g],Channel 2,Time-shifted signal
+2,Channel 3,Channel 3 [g],Channel 3,SDOF Response signal
+3,Channel 4,Channel 4 [g],Channel 4,Noise signal
