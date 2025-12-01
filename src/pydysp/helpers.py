@@ -236,7 +236,7 @@ def _annotate_fourier_peak(
     f_peak, s_peak = spec.peak()
 
     if fmt is None:
-        fmt = "{f:.3g} Hz\\n{amp:.3g}"
+        fmt = "{f:.3g} Hz\n{amp:.3g}"
 
     text = fmt.format(f=f_peak, amp=s_peak)
 
@@ -298,7 +298,7 @@ def _annotate_psd_peak(
     f_peak, p_peak = psd.peak()
 
     if fmt is None:
-        fmt = "{f:.3g} Hz\\n{p:.3g}"
+        fmt = "{f:.3g} Hz\n{p:.3g}"
 
     text = fmt.format(f=f_peak, p=p_peak)
 
@@ -481,6 +481,9 @@ def annotate_response_peak(
     """
     T_peak, Sa_peak = rs.peak()
 
+    # ensure default includes a real newline (if user left default)
+    if fmt == "{T:.3g} s\\n{Sa:.3g} g":
+        fmt = "{T:.3g} s\n{Sa:.3g} g"
     text = fmt.format(T=T_peak, Sa=Sa_peak)
 
     ax.plot([T_peak], [Sa_peak], "o")
