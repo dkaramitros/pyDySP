@@ -28,4 +28,4 @@ __all__ = [
     "annotate_psd_peak",
     "annotate_response_peak",
 ]
-__version__ = "0.2.0"
+__version__ = "0.2.1"
