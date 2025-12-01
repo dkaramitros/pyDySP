@@ -390,8 +390,8 @@ def test_channel_health_basic():
 
 
 def test_channel_info_to_csv_removes_redundant(tmp_path):
-    ch1 = make_channel(n=20, dt=0.01, name_user="A", units="g")
-    ch2 = make_channel(n=20, dt=0.01, name_user="A", units="g")
+    ch1 = make_channel(n=20, dt=0.01, name_user="A", name_input="A", units="g")
+    ch2 = make_channel(n=20, dt=0.01, name_user="A", name_input="ChA", units="g")
 
     test = Test.from_channels(name="T", channels=[ch1, ch2])
 
@@ -401,9 +401,20 @@ def test_channel_info_to_csv_removes_redundant(tmp_path):
     with open(csv_path, newline="") as f:
         reader = csv.reader(f)
         header = next(reader)
+        row1 = next(reader)
+        row2 = next(reader)
 
-    # Only the index column should remain after removing redundant fields
-    assert header == ["idx"]
+    # Only the appropriate columns should remain after removing redundant fields
+    assert header == [
+        "idx",
+        "name_user",
+        "name_input",
+        "units",
+        "label_axis",
+        "calibration_factor",
+    ]
+    assert row1 == ["0", "", "A", "g", "A [g]", "1.0"]
+    assert row2 == ["1", "A", "ChA", "g", "A [g]", "1.0"]
 
 
 def test_import_csv_raises_on_unmatched_row(tmp_path):

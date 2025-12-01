@@ -1115,30 +1115,83 @@ class Test:
             "calibration_factor",
             "tags",
         ]
-        # Detect redundant fields (all channels identical → drop)
+
+        # Priority list for intra-channel deduplication
+        priority = ["name_input", "name_user", "label_axis", "label_legend"]
+
+        # Build per-channel value dicts. For string fields we normalise (strip)
+        # and for others (numbers, tags) keep original values.
+        per_ch_vals: list[dict[str, Any]] = []
+        for ch in self.channels:
+            v: dict[str, Any] = {}
+            for f in fields:
+                raw = getattr(ch, f, None)
+                if f in ("name_input", "name_user", "label_axis", "label_legend"):
+                    if raw is None:
+                        v[f] = None
+                    else:
+                        s = str(raw).strip()
+                        v[f] = s if s != "" else None
+                elif f == "tags":
+                    v[f] = set(raw) if raw else set()
+                else:
+                    v[f] = raw
+            per_ch_vals.append(v)
+
+        # Apply intra-channel suppression according to priority:
+        # if a lower-priority value equals any kept higher-priority value for same channel -> drop it.
+        for v in per_ch_vals:
+            seen: set[str] = set()
+            for p in priority:
+                val = v.get(p)
+                if val is None:
+                    continue
+                # Compare using exact (stripped) equality
+                if val in seen:
+                    v[p] = None
+                else:
+                    seen.add(val)
+
+        # Decide which fields actually have at least one non-empty value after suppression
         fields_to_export = ["idx"]
         for f in fields:
-            values = []
-            for ch in self.channels:
-                v = getattr(ch, f)
-                if f == "tags":
-                    v = tuple(sorted(v)) if v else ()
-                values.append(v)
-            if len(set(values)) > 0:
+            if f == "tags":
+                # Include tags column if any channel has non-empty tags
+                any_nonempty = any(bool(v["tags"]) for v in per_ch_vals)
+            elif f in ("name_input", "name_user", "label_axis", "label_legend"):
+                any_nonempty = any(v.get(f) not in (None, "") for v in per_ch_vals)
+            else:
+                # For other fields include if any channel has a non-None / non-empty value
+                any_nonempty = any(
+                    v.get(f) is not None and v.get(f) != "" for v in per_ch_vals
+                )
+            if any_nonempty:
                 fields_to_export.append(f)
+
+        # Write CSV
         with open(filename, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(fields_to_export)
             for idx, ch in enumerate(self.channels):
                 row = []
+                vals = per_ch_vals[idx]
                 for field in fields_to_export:
                     if field == "idx":
                         row.append(idx)
                     elif field == "tags":
-                        row.append(",".join(sorted(ch.tags)) if ch.tags else "")
+                        row.append(
+                            ",".join(sorted(vals["tags"])) if vals["tags"] else ""
+                        )
                     else:
-                        value = getattr(ch, field)
-                        row.append("" if value is None else value)
+                        value = vals.get(field)
+                        # Preserve numeric types (e.g. calibration_factor). Convert others to string.
+                        if value is None:
+                            row.append("")
+                        else:
+                            if isinstance(value, (int, float)):
+                                row.append(value)
+                            else:
+                                row.append(value)
                 writer.writerow(row)
 
     def with_channel_info_from_csv(self, filename: str) -> "Test":
