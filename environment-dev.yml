@@ -1,4 +1,4 @@
-name: pydysp
+name: pydysp-dev
 channels:
   - conda-forge
 

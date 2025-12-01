@@ -93,9 +93,17 @@ pip install pydysp
 ### Conda / Mamba environment
 
 ```bash
-mamba create -n pydysp python=3.11 pip
-mamba activate pydysp
+conda create -n pydysp python=3.11 pip
+conda activate pydysp
 pip install pydysp
+```
+
+To create the environment from the `environment.yml` file:
+
+```bash
+conda env create -f environment.yml
+# replace with environment-dev.yml for development
+conda activate pydysp
 ```
 
 ## Dependencies
