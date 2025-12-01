@@ -4,6 +4,7 @@ from .test import Test
 from .spectra import FourierSpectrum, WelchSpectrum
 from .arias import AriasResult
 from .response import ResponseSpectrum
+from .downsample import downsample
 from .helpers import (
     annotate_peak,
     annotate_time_peak,
@@ -11,6 +12,7 @@ from .helpers import (
     annotate_psd_peak,
     annotate_response_peak,
 )
+
 
 __all__ = [
     # Main classes
@@ -27,5 +29,6 @@ __all__ = [
     "annotate_fourier_peak",
     "annotate_psd_peak",
     "annotate_response_peak",
+    "downsample",
 ]
 __version__ = "0.2.1"
