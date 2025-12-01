@@ -31,4 +31,4 @@ __all__ = [
     "annotate_response_peak",
     "downsample",
 ]
-__version__ = "0.2.1"
+__version__ = "0.2.2alpha"
