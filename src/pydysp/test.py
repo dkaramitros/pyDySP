@@ -2784,6 +2784,18 @@ class Test:
             squeeze=False,
             layout="tight",
         )
+
+        # Determine if any cell is a multiplot (contains >1 channel).
+        # If so, we will render all subplots in "multi" mode (generic y-label + legend).
+        global_multiplot = False
+        for row in normalized:
+            for cell in row:
+                if isinstance(cell, (list, tuple)) and len(cell) > 1:
+                    global_multiplot = True
+                    break
+            if global_multiplot:
+                break
+
         all_channels: list[Channel] = []
         for i_row, row in enumerate(normalized):
             for j_col, cell in enumerate(row):
@@ -2807,7 +2819,13 @@ class Test:
                     else:
                         ch = self[key]
                     channels.append(ch)
-                multi = len(channels) > 1
+                # If any subplot in the grid is a multiplot, render ALL subplots
+                # in multi mode (generic axis label + legend). Otherwise use per-cell multi.
+                if global_multiplot:
+                    multi = True
+                else:
+                    multi = len(channels) > 1
+
                 for ch in channels:
                     self._plot_one_channel(
                         ch=ch,
