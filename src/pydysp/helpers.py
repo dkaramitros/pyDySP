@@ -187,14 +187,18 @@ def _annotate_time_peak(
     text = fmt.format(t=t_peak, y=y_peak)
 
     ax.plot([t_peak], [y_peak], "o")
+    # only set xytext/textcoords defaults if caller didn't provide them
+    local_annotate_kwargs = dict(annotate_kwargs)
+    if "xytext" not in local_annotate_kwargs:
+        local_annotate_kwargs["xytext"] = (5, 5)
+    if "textcoords" not in local_annotate_kwargs:
+        local_annotate_kwargs["textcoords"] = "offset points"
     ax.annotate(
         text,
         xy=(t_peak, y_peak),
-        xytext=(5, 5),
-        textcoords="offset points",
         ha="left",
         va="bottom",
-        **annotate_kwargs,
+        **local_annotate_kwargs,
     )
 
 
@@ -241,14 +245,18 @@ def _annotate_fourier_peak(
     text = fmt.format(f=f_peak, amp=s_peak)
 
     ax.plot([f_peak], [s_peak], "o")
+    # only set xytext/textcoords defaults if caller didn't provide them
+    local_annotate_kwargs = dict(annotate_kwargs)
+    if "xytext" not in local_annotate_kwargs:
+        local_annotate_kwargs["xytext"] = (5, 5)
+    if "textcoords" not in local_annotate_kwargs:
+        local_annotate_kwargs["textcoords"] = "offset points"
     ax.annotate(
         text,
         xy=(f_peak, s_peak),
-        xytext=(5, 5),
-        textcoords="offset points",
         ha="left",
         va="bottom",
-        **annotate_kwargs,
+        **local_annotate_kwargs,
     )
 
 
@@ -303,14 +311,18 @@ def _annotate_psd_peak(
     text = fmt.format(f=f_peak, p=p_peak)
 
     ax.plot([f_peak], [p_peak], "o")
+    # only set xytext/textcoords defaults if caller didn't provide them
+    local_annotate_kwargs = dict(annotate_kwargs)
+    if "xytext" not in local_annotate_kwargs:
+        local_annotate_kwargs["xytext"] = (5, 5)
+    if "textcoords" not in local_annotate_kwargs:
+        local_annotate_kwargs["textcoords"] = "offset points"
     ax.annotate(
         text,
         xy=(f_peak, p_peak),
-        xytext=(5, 5),
-        textcoords="offset points",
         ha="left",
         va="bottom",
-        **annotate_kwargs,
+        **local_annotate_kwargs,
     )
 
 
@@ -487,12 +499,16 @@ def annotate_response_peak(
     text = fmt.format(T=T_peak, Sa=Sa_peak)
 
     ax.plot([T_peak], [Sa_peak], "o")
+    # only set xytext/textcoords defaults if caller didn't provide them
+    local_annotate_kwargs = dict(annotate_kwargs)
+    if "xytext" not in local_annotate_kwargs:
+        local_annotate_kwargs["xytext"] = (5, 5)
+    if "textcoords" not in local_annotate_kwargs:
+        local_annotate_kwargs["textcoords"] = "offset points"
     ax.annotate(
         text,
         xy=(T_peak, Sa_peak),
-        xytext=(5, 5),
-        textcoords="offset points",
         ha="left",
         va="bottom",
-        **annotate_kwargs,
+        **local_annotate_kwargs,
     )
