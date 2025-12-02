@@ -1288,6 +1288,11 @@ class Test:
         }
         idx_col = next((i for i, a in col_to_attr.items() if a == "idx"), None)
         new_channels = list(self.channels)
+
+        # Precompute whether CSV provides explicit label columns
+        has_label_axis_col = any(a == "label_axis" for a in col_to_attr.values())
+        has_label_legend_col = any(a == "label_legend" for a in col_to_attr.values())
+
         for row in rows:
             if not any(row):
                 continue
@@ -1317,30 +1322,90 @@ class Test:
                         break
             if ch_idx is None:
                 raise ValueError(f"Row could not match any channel: {row}")
+
             ch = new_channels[ch_idx]
-            updates = {}
-            tags_val = None
+
+            # Collect raw string values for all recognised attributes in this row
+            row_vals: dict[str, str] = {}
             for col, attr in col_to_attr.items():
-                if attr == "idx" or col >= len(row):
-                    continue
-                val = row[col].strip()
-                if not val:
-                    continue
-                if attr == "tags":
-                    tokens = [
-                        t.strip() for t in val.replace(";", ",").split(",") if t.strip()
-                    ]
-                    tags_val = set(tokens)
-                elif attr == "calibration_factor":
-                    try:
-                        updates[attr] = float(val)
-                    except ValueError:
-                        continue
+                if col < len(row):
+                    row_vals[attr] = row[col].strip()
                 else:
+                    row_vals[attr] = ""
+
+            updates: dict[str, Any] = {}
+            tags_val = None
+
+            # Handle tags if present
+            if row_vals.get("tags"):
+                tokens = [
+                    t.strip()
+                    for t in row_vals["tags"].replace(";", ",").split(",")
+                    if t.strip()
+                ]
+                tags_val = set(tokens)
+
+            # calibration_factor parsing
+            cf_raw = row_vals.get("calibration_factor", "")
+            if cf_raw:
+                try:
+                    updates["calibration_factor"] = float(cf_raw)
+                except ValueError:
+                    # ignore bad numeric conversion, keep existing calibration
+                    pass
+
+            # If either name_user OR name_input is provided in this row, treat it
+            # as a renaming operation: let the Channel constructor regenerate
+            # default labels (name_user falls back to name_input inside Channel.__post_init__).
+            name_user_provided = bool(row_vals.get("name_user"))
+            name_input_provided = bool(row_vals.get("name_input"))
+            name_key_provided = name_user_provided or name_input_provided
+
+            # Copy other string-like fields. For label_axis/label_legend:
+            # - If CSV provides a non-empty value, use it.
+            # - Else if name_user_provided, set explicit None so Channel.__post_init__
+            #   will create sensible defaults (possibly using units).
+            for attr in (
+                "name_input",
+                "name_user",
+                "quantity",
+                "units",
+                "raw_units",
+                "description_long",
+            ):
+                val = row_vals.get(attr)
+                if val:
                     updates[attr] = val
+
+            # label_axis
+            la_val = row_vals.get("label_axis", "")
+            if la_val:
+                updates["label_axis"] = la_val
+            else:
+                # If either name_user or name_input was provided and no explicit
+                # label_axis was supplied in the CSV, set None so Channel.__post_init__
+                # can create sensible defaults (name_user preferred, else name_input).
+                if name_key_provided and not has_label_axis_col:
+                    updates["label_axis"] = None
+                elif name_key_provided and has_label_axis_col and la_val == "":
+                    updates["label_axis"] = None
+
+            # label_legend
+            ll_val = row_vals.get("label_legend", "")
+            if ll_val:
+                updates["label_legend"] = ll_val
+            else:
+                if name_key_provided and not has_label_legend_col:
+                    updates["label_legend"] = None
+                elif name_key_provided and has_label_legend_col and ll_val == "":
+                    updates["label_legend"] = None
+
             if tags_val is not None:
                 updates["tags"] = tags_val
-            new_channels[ch_idx] = replace(ch, **updates)
+
+            # Preserve numeric types and pass through strings; replace() will call __post_init__
+            if updates:
+                new_channels[ch_idx] = replace(ch, **updates)
         return type(self)(
             name=self.name,
             description=self.description,
@@ -2141,6 +2206,7 @@ class Test:
         ------
         ValueError
             If the channels are empty, have different lengths, or have
+
             inconsistent or non-positive ``dt`` values, or if ``kind`` is
             not one of ``"H1"`` or ``"H2"``.
         """
@@ -2741,7 +2807,6 @@ class Test:
                     else:
                         ch = self[key]
                     channels.append(ch)
-                    all_channels.append(ch)
                 multi = len(channels) > 1
                 for ch in channels:
                     self._plot_one_channel(
@@ -2881,7 +2946,7 @@ class Test:
         -------
         str
             Health check table as a formatted string. If no channels are
-            selected, a short message is returned instead.
+            selected, a short message is returned.
 
         Notes
         -----
