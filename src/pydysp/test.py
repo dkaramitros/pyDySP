@@ -485,6 +485,7 @@ class Test:
             "name_input",
             "quantity",
             "units",
+            "description",
             "tags",
             "calibration_factor",
         ]
@@ -497,6 +498,7 @@ class Test:
                     ch.name_input or "-",
                     ch.quantity or "-",
                     ch.units or "-",
+                    ch.description_long or "-",
                     ",".join(sorted(ch.tags)) if ch.tags else "-",
                     (
                         f"{ch.calibration_factor:g}"
